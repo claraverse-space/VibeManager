@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>ProjectGenerator</title>
+  <title>VibeManager</title>
   <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
   <style>
@@ -393,6 +393,7 @@
 
     /* Terminal */
     .terminal-container {
+      position: relative;
       min-height: 0;
       min-width: 0;
       background: var(--bg);
@@ -401,6 +402,71 @@
     }
 
     .terminal-container .xterm { flex: 1; padding: 4px 2px; min-height: 0; }
+
+    /* Connecting overlay */
+    .connect-overlay {
+      position: absolute;
+      inset: 0;
+      background: var(--bg);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+    .connect-overlay.visible { display: flex; }
+    .connect-overlay .co-text {
+      color: var(--accent);
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    .connect-overlay .co-spinner {
+      display: flex;
+      gap: 3px;
+    }
+    .connect-overlay .co-spinner span {
+      width: 6px;
+      height: 16px;
+      background: var(--accent);
+      opacity: 0.2;
+      animation: co-pulse 0.8s ease-in-out infinite;
+    }
+    .connect-overlay .co-spinner span:nth-child(2) { animation-delay: 0.1s; }
+    .connect-overlay .co-spinner span:nth-child(3) { animation-delay: 0.2s; }
+    .connect-overlay .co-spinner span:nth-child(4) { animation-delay: 0.3s; }
+    .connect-overlay .co-spinner span:nth-child(5) { animation-delay: 0.4s; }
+    .connect-overlay .co-spinner span:nth-child(6) { animation-delay: 0.5s; }
+    .connect-overlay .co-spinner span:nth-child(7) { animation-delay: 0.6s; }
+    .connect-overlay .co-spinner span:nth-child(8) { animation-delay: 0.7s; }
+    @keyframes co-pulse {
+      0%, 100% { opacity: 0.2; transform: scaleY(0.6); }
+      50% { opacity: 1; transform: scaleY(1); }
+    }
+    .connect-overlay .co-session {
+      color: var(--text-dim);
+      font-size: 11px;
+      margin-top: 10px;
+    }
+
+    /* Logo */
+    .toolbar-logo {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-right: 4px;
+    }
+    .toolbar-logo img {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+    }
+    .toolbar-logo .logo-text {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.3px;
+    }
 
     /* View modes */
     .main-content[data-view="preview"] .terminal-container,
@@ -1080,6 +1146,7 @@
     @media (max-width: 600px) {
       .toolbar { padding: 6px 8px; gap: 6px; }
       .toolbar button { padding: 6px 10px; font-size: 12px; }
+      .toolbar-logo { display: none; }
       .ports-section { display: none; }
       .view-tab { padding: 6px 8px; font-size: 10px; }
       .session-item .del-btn { opacity: 1; }
@@ -1089,6 +1156,10 @@
 <body>
 
   <div class="toolbar">
+    <div class="toolbar-logo">
+      <img src="https://claraverse.app/favicon.ico" alt="VM">
+      <span class="logo-text">VibeManager</span>
+    </div>
     <button id="btn-sessions">Sessions</button>
     <div class="session-switcher" id="session-switcher"></div>
     <div class="session-name" id="session-name">No session</div>
@@ -1121,6 +1192,11 @@
     </div>
 
     <div class="terminal-container" id="terminal-container">
+      <div class="connect-overlay" id="connect-overlay">
+        <div class="co-text" id="co-text">Connecting...</div>
+        <div class="co-spinner"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        <div class="co-session" id="co-session"></div>
+      </div>
       <div class="virtual-keys" id="virtual-keys">
         <button class="vkey" data-key="escape">Esc</button>
         <button class="vkey" data-key="tab">Tab</button>
@@ -1248,6 +1324,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
   <script>
     let ws = null;
+    let statusWs = null;
     let term = null;
     let fitAddon = null;
     let currentSession = null;
@@ -1256,6 +1333,7 @@
     let ctrlActive = false;
     let intentionalDisconnect = false;
     let fbCurrentPath = '/home';
+    let dashboardVisible = false;
 
     const isMobile = window.innerWidth <= 600;
 
@@ -1280,7 +1358,7 @@
       term.open(document.getElementById('terminal-container'));
       setTimeout(() => fitAddon.fit(), 50);
 
-      term.writeln('\x1b[38;2;108;99;255mProjectGenerator\x1b[0m');
+      term.writeln('\x1b[38;2;108;99;255mVibeManager\x1b[0m');
       term.writeln('\x1b[90mOpen Sessions to get started.\x1b[0m\r\n');
 
       term.attachCustomKeyEventHandler((ev) => {
@@ -1295,73 +1373,8 @@
         }
         return true;
       });
-    }
 
-    function connectSession(sessionName) {
-      if (ws) { intentionalDisconnect = true; ws.close(); }
-      intentionalDisconnect = false;
-
-      setTimeout(() => fitAddon.fit(), 100);
-      const cols = term.cols;
-      const rows = term.rows;
-      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${location.host}?session=${encodeURIComponent(sessionName)}&cols=${cols}&rows=${rows}`;
-
-      ws = new WebSocket(wsUrl);
-      let suppressOutput = true;
-
-      ws.onopen = () => {
-        setConnected(true);
-        term.reset();
-        currentSession = sessionName;
-        document.getElementById('session-name').textContent = sessionName;
-        localStorage.setItem('pg_lastSession', sessionName);
-        refreshSessionSwitcher();
-      };
-
-      ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'data') {
-          if (!suppressOutput) term.write(msg.data);
-        } else if (msg.type === 'attached') {
-          document.getElementById('status-shell').textContent = msg.shell;
-          document.getElementById('session-name').textContent = `${msg.session} - ${msg.projectPath}`;
-          // After attach, wait for tmux capability negotiation to finish,
-          // then unsuppress and force a clean redraw via resize
-          setTimeout(() => {
-            suppressOutput = false;
-            if (fitAddon) fitAddon.fit();
-            // Force tmux to redraw by sending resize
-            const dims = fitAddon ? { cols: term.cols, rows: term.rows } : { cols: 80, rows: 24 };
-            ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
-          }, 150);
-        } else if (msg.type === 'detached') {
-          term.writeln(`\r\n\x1b[33mSession detached (${msg.reason})\x1b[0m`);
-          setConnected(false);
-          if (msg.reason === 'session_killed') {
-            term.writeln('\x1b[90mSession was terminated. Open Sessions to revive or create new.\x1b[0m');
-          }
-        } else if (msg.type === 'error') {
-          term.writeln(`\r\n\x1b[31m${msg.message}\x1b[0m`);
-          setConnected(false);
-        }
-      };
-
-      ws.onclose = () => {
-        setConnected(false);
-        if (!intentionalDisconnect && currentSession) {
-          // Auto-reconnect after 2s
-          setTimeout(() => {
-            if (!intentionalDisconnect && currentSession) {
-              term.writeln('\r\n\x1b[90mReconnecting...\x1b[0m');
-              connectSession(currentSession);
-            }
-          }, 2000);
-        }
-      };
-
-      ws.onerror = () => {};
-
+      // Register terminal I/O handlers ONCE
       term.onData(data => {
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'data', data }));
@@ -1373,6 +1386,97 @@
           ws.send(JSON.stringify({ type: 'resize', cols, rows }));
         }
       });
+    }
+
+    function showConnectOverlay(sessionName, message) {
+      const overlay = document.getElementById('connect-overlay');
+      document.getElementById('co-text').textContent = message || 'Connecting...';
+      document.getElementById('co-session').textContent = sessionName;
+      overlay.classList.add('visible');
+    }
+
+    function hideConnectOverlay() {
+      document.getElementById('connect-overlay').classList.remove('visible');
+    }
+
+    function connectSession(sessionName) {
+      // Kill old connection cleanly
+      if (ws) {
+        intentionalDisconnect = true;
+        ws.close();
+        ws = null;
+      }
+
+      showConnectOverlay(sessionName, 'Attaching to session...');
+
+      setTimeout(() => fitAddon.fit(), 100);
+      const cols = term.cols;
+      const rows = term.rows;
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${location.host}/?session=${encodeURIComponent(sessionName)}&cols=${cols}&rows=${rows}`;
+
+      const newWs = new WebSocket(wsUrl);
+      let suppressOutput = true;
+
+      newWs.onopen = () => {
+        ws = newWs;
+        intentionalDisconnect = false;
+        setConnected(true);
+        term.reset();
+        currentSession = sessionName;
+        document.getElementById('session-name').textContent = sessionName;
+        localStorage.setItem('pg_lastSession', sessionName);
+        document.getElementById('co-text').textContent = 'Loading terminal...';
+      };
+
+      newWs.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'data') {
+          if (!suppressOutput) term.write(msg.data);
+        } else if (msg.type === 'attached') {
+          document.getElementById('status-shell').textContent = msg.shell;
+          document.getElementById('session-name').textContent = `${msg.session} - ${msg.projectPath}`;
+          setTimeout(() => {
+            suppressOutput = false;
+            hideConnectOverlay();
+            if (fitAddon) fitAddon.fit();
+            const dims = { cols: term.cols, rows: term.rows };
+            if (newWs.readyState === WebSocket.OPEN) {
+              newWs.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+            }
+          }, 150);
+        } else if (msg.type === 'detached') {
+          hideConnectOverlay();
+          term.writeln(`\r\n\x1b[33mSession detached (${msg.reason})\x1b[0m`);
+          setConnected(false);
+          if (msg.reason === 'session_killed') {
+            term.writeln('\x1b[90mSession was terminated. Open Sessions to revive or create new.\x1b[0m');
+          }
+        } else if (msg.type === 'error') {
+          hideConnectOverlay();
+          term.writeln(`\r\n\x1b[31m${msg.message}\x1b[0m`);
+          setConnected(false);
+        }
+      };
+
+      newWs.onclose = () => {
+        if (ws === newWs) {
+          ws = null;
+          setConnected(false);
+          if (!intentionalDisconnect && currentSession) {
+            showConnectOverlay(currentSession, 'Reconnecting...');
+            setTimeout(() => {
+              if (!intentionalDisconnect && currentSession) {
+                connectSession(currentSession);
+              }
+            }, 2000);
+          } else {
+            hideConnectOverlay();
+          }
+        }
+      };
+
+      newWs.onerror = () => {};
     }
 
     function setConnected(connected) {
@@ -1556,20 +1660,14 @@
     }
 
     // --- Ports ---
-    async function scanPorts() {
+    function renderPorts(ports) {
       const container = document.getElementById('ports-container');
-      try {
-        const res = await fetch('/api/ports');
-        const data = await res.json();
-        if (data.ports.length === 0) {
-          container.innerHTML = '<span style="font-size:11px;color:var(--text-dim)">--</span>';
-        } else {
-          container.innerHTML = data.ports.map(p =>
-            `<button class="port-btn ${p === activePort ? 'active' : ''}" onclick="selectPort(${p})">${p}</button>`
-          ).join(' ');
-        }
-      } catch {
-        container.innerHTML = '<span style="font-size:11px;color:var(--danger)">err</span>';
+      if (!ports || ports.length === 0) {
+        container.innerHTML = '<span style="font-size:11px;color:var(--text-dim)">--</span>';
+      } else {
+        container.innerHTML = ports.map(p =>
+          `<button class="port-btn ${p === activePort ? 'active' : ''}" onclick="selectPort(${p})">${p}</button>`
+        ).join(' ');
       }
     }
 
@@ -1595,7 +1693,6 @@
     }
 
     // --- Dashboard ---
-    let dashboardInterval = null;
 
     function relativeTime(isoString) {
       if (!isoString) return '';
@@ -1619,58 +1716,52 @@
       return p;
     }
 
-    async function loadDashboard() {
-      try {
-        const res = await fetch('/api/stats');
-        const data = await res.json();
+    function renderDashboard(data) {
+      if (!dashboardVisible) return;
 
-        document.getElementById('stats-bar').innerHTML = `
-          <div class="stat-item running"><div><div class="stat-value">${data.running}</div><div class="stat-label">Running</div></div></div>
-          <div class="stat-item stopped"><div><div class="stat-value">${data.stopped}</div><div class="stat-label">Stopped</div></div></div>
-          <div class="stat-item total"><div><div class="stat-value">${data.total}</div><div class="stat-label">Total</div></div></div>
-          <div class="stat-item uptime"><div><div class="stat-value">${formatUptime(data.uptime)}</div><div class="stat-label">Uptime</div></div></div>
+      document.getElementById('stats-bar').innerHTML = `
+        <div class="stat-item running"><div><div class="stat-value">${data.stats.running}</div><div class="stat-label">Running</div></div></div>
+        <div class="stat-item stopped"><div><div class="stat-value">${data.stats.stopped}</div><div class="stat-label">Stopped</div></div></div>
+        <div class="stat-item total"><div><div class="stat-value">${data.stats.total}</div><div class="stat-label">Total</div></div></div>
+        <div class="stat-item uptime"><div><div class="stat-value">${formatUptime(data.stats.uptime)}</div><div class="stat-label">Uptime</div></div></div>
+      `;
+
+      const grid = document.getElementById('cards-grid');
+      if (data.sessions.length === 0) {
+        grid.innerHTML = `
+          <div class="dashboard-empty" style="grid-column: 1 / -1;">
+            <div class="icon">&#9881;</div>
+            <p>No projects yet</p>
+            <p style="font-size:12px;opacity:0.5">Click "+ New Project" to start building</p>
+          </div>
         `;
-
-        const grid = document.getElementById('cards-grid');
-        if (data.sessions.length === 0) {
-          grid.innerHTML = `
-            <div class="dashboard-empty" style="grid-column: 1 / -1;">
-              <div class="icon">&#9881;</div>
-              <p>No projects yet</p>
-              <p style="font-size:12px;opacity:0.5">Click "+ New Project" to start building</p>
-            </div>
-          `;
-          return;
-        }
-
-        grid.innerHTML = data.sessions
-          .sort((a, b) => (b.alive ? 1 : 0) - (a.alive ? 1 : 0) || new Date(b.lastAccessedAt) - new Date(a.lastAccessedAt))
-          .map(s => `
-            <div class="session-card ${s.alive ? 'alive' : 'dead'}">
-              <div class="card-header">
-                <div class="card-dot ${s.alive ? 'alive' : ''}"></div>
-                <span class="card-name">${s.name}</span>
-              </div>
-              <div class="card-path">${shortenPath(s.projectPath)}</div>
-              <div class="card-meta">
-                <span>${s.shell}</span>
-                <span>${relativeTime(s.lastAccessedAt)}</span>
-              </div>
-              <div class="card-actions">
-                ${s.alive ? `
-                  <button class="btn-attach" onclick="attachFromDash('${s.name}')">Attach</button>
-                  <button class="btn-stop" onclick="stopFromDash('${s.name}')">Stop</button>
-                ` : `
-                  <button class="btn-revive" onclick="reviveFromDash('${s.name}')">Revive</button>
-                  <button class="btn-delete" onclick="deleteFromDash('${s.name}')">Delete</button>
-                `}
-              </div>
-            </div>
-          `).join('');
-        refreshSessionSwitcher();
-      } catch (err) {
-        console.error('Dashboard load error:', err);
+        return;
       }
+
+      grid.innerHTML = data.sessions
+        .sort((a, b) => (b.alive ? 1 : 0) - (a.alive ? 1 : 0) || new Date(b.lastAccessedAt) - new Date(a.lastAccessedAt))
+        .map(s => `
+          <div class="session-card ${s.alive ? 'alive' : 'dead'}">
+            <div class="card-header">
+              <div class="card-dot ${s.alive ? 'alive' : ''}"></div>
+              <span class="card-name">${s.name}</span>
+            </div>
+            <div class="card-path">${shortenPath(s.projectPath)}</div>
+            <div class="card-meta">
+              <span>${s.shell}</span>
+              <span>${relativeTime(s.lastAccessedAt)}</span>
+            </div>
+            <div class="card-actions">
+              ${s.alive ? `
+                <button class="btn-attach" onclick="attachFromDash('${s.name}')">Attach</button>
+                <button class="btn-stop" onclick="stopFromDash('${s.name}')">Stop</button>
+              ` : `
+                <button class="btn-revive" onclick="reviveFromDash('${s.name}')">Revive</button>
+                <button class="btn-delete" onclick="deleteFromDash('${s.name}')">Delete</button>
+              `}
+            </div>
+          </div>
+        `).join('');
     }
 
     function attachFromDash(name) {
@@ -1684,11 +1775,10 @@
         await fetch(`/api/sessions/${encodeURIComponent(name)}/stop`, { method: 'POST' });
         if (currentSession === name) {
           intentionalDisconnect = true;
-          if (ws) ws.close();
+          if (ws) { ws.close(); ws = null; }
           currentSession = null;
           document.getElementById('session-name').textContent = 'No session';
         }
-        loadDashboard();
       } catch (err) {
         alert('Failed to stop: ' + err.message);
       }
@@ -1697,7 +1787,6 @@
     async function reviveFromDash(name) {
       try {
         await fetch(`/api/sessions/${encodeURIComponent(name)}/revive`, { method: 'POST' });
-        loadDashboard();
       } catch (err) {
         alert('Failed to revive: ' + err.message);
       }
@@ -1709,11 +1798,10 @@
         await fetch(`/api/sessions/${encodeURIComponent(name)}`, { method: 'DELETE' });
         if (currentSession === name) {
           intentionalDisconnect = true;
-          if (ws) ws.close();
+          if (ws) { ws.close(); ws = null; }
           currentSession = null;
           document.getElementById('session-name').textContent = 'No session';
         }
-        loadDashboard();
       } catch (err) {
         alert('Failed to delete: ' + err.message);
       }
@@ -1722,24 +1810,20 @@
     // --- Session Switcher ---
     const sessionIcons = ['◆', '●', '■', '▲', '★', '◈', '◉', '▣', '◍', '⬟'];
 
-    async function refreshSessionSwitcher() {
-      try {
-        const res = await fetch('/api/sessions');
-        const data = await res.json();
-        const container = document.getElementById('session-switcher');
-        const alive = (data.sessions || []).filter(s => s.alive)
-          .sort((a, b) => new Date(b.lastAccessedAt) - new Date(a.lastAccessedAt))
-          .slice(0, 3);
-        if (alive.length < 2) {
-          container.innerHTML = '';
-          return;
-        }
-        container.innerHTML = alive.map((s, i) => {
-          const isActive = s.name === currentSession;
-          const icon = sessionIcons[i % sessionIcons.length];
-          return `<button class="ss-btn ${isActive ? 'active' : ''}" data-index="${i + 1}" onclick="quickSwitch('${s.name}', true)" title="${s.name}"><span class="ss-dot"></span><span class="ss-name">${icon} ${s.name}</span></button>`;
-        }).join('');
-      } catch {}
+    function renderSessionSwitcher(sessions) {
+      const container = document.getElementById('session-switcher');
+      const alive = (sessions || []).filter(s => s.alive)
+        .sort((a, b) => new Date(b.lastAccessedAt) - new Date(a.lastAccessedAt))
+        .slice(0, 3);
+      if (alive.length < 2) {
+        container.innerHTML = '';
+        return;
+      }
+      container.innerHTML = alive.map((s, i) => {
+        const isActive = s.name === currentSession;
+        const icon = sessionIcons[i % sessionIcons.length];
+        return `<button class="ss-btn ${isActive ? 'active' : ''}" data-index="${i + 1}" onclick="quickSwitch('${s.name}', true)" title="${s.name}"><span class="ss-dot"></span><span class="ss-name">${icon} ${s.name}</span></button>`;
+      }).join('');
     }
 
     function quickSwitch(name) {
@@ -1757,11 +1841,9 @@
     const cpuHistory = [];
     const memHistory = [];
     let prevNet = null;
-    let sysmonInterval = null;
 
     const SPARK_CHARS = '▁▂▃▄▅▆▇█';
     const BAR_FILLED = '█';
-    const BAR_HALF = '▌';
     const BAR_EMPTY = '░';
 
     function makeBar(percent, width = 20) {
@@ -1799,84 +1881,63 @@
       return 'cool';
     }
 
-    async function loadSysmon() {
-      try {
-        const res = await fetch('/api/system');
-        const d = await res.json();
-        if (d.error) return;
+    function renderSysmon(d) {
+      if (!dashboardVisible) return;
 
-        cpuHistory.push(d.cpu.percent);
-        if (cpuHistory.length > 30) cpuHistory.shift();
-        memHistory.push(d.mem.percent);
-        if (memHistory.length > 30) memHistory.shift();
+      cpuHistory.push(d.cpu.percent);
+      if (cpuHistory.length > 30) cpuHistory.shift();
+      memHistory.push(d.mem.percent);
+      if (memHistory.length > 30) memHistory.shift();
 
-        // Net speed calculation
-        let netSpeed = { rx: 0, tx: 0 };
-        if (prevNet) {
-          netSpeed.rx = Math.max(0, d.net.rx - prevNet.rx);
-          netSpeed.tx = Math.max(0, d.net.tx - prevNet.tx);
-        }
-        prevNet = { rx: d.net.rx, tx: d.net.tx };
-
-        const tc = tempClass(d.temp);
-        const grid = document.getElementById('sysmon-grid');
-        grid.innerHTML = `
-          <div class="sysmon-item">
-            <div class="sysmon-label"><span>CPU</span><span class="sysmon-value">${d.cpu.percent}%</span></div>
-            <div class="sysmon-bar ${d.cpu.percent > 80 ? 'hot' : d.cpu.percent > 50 ? 'warm' : 'cool'}">${makeBar(d.cpu.percent)}</div>
-            <div class="sysmon-sparkline">${makeSparkline(cpuHistory)}</div>
-          </div>
-          <div class="sysmon-item">
-            <div class="sysmon-label"><span>Memory</span><span class="sysmon-value">${d.mem.percent}%</span></div>
-            <div class="sysmon-bar ${d.mem.percent > 85 ? 'hot' : d.mem.percent > 60 ? 'warm' : 'cool'}">${makeBar(d.mem.percent)}</div>
-            <div class="sysmon-sparkline">${makeSparkline(memHistory)}</div>
-            <div class="sysmon-label"><span>${formatBytes(d.mem.used)} / ${formatBytes(d.mem.total)}</span></div>
-          </div>
-          <div class="sysmon-item">
-            <div class="sysmon-label"><span>Temp</span></div>
-            <div class="sysmon-temp ${tc}">${d.temp}°C</div>
-            <div class="sysmon-bar ${tc}">${makeBar(Math.min(d.temp, 85) / 85 * 100)}</div>
-          </div>
-          <div class="sysmon-item">
-            <div class="sysmon-label"><span>Disk /</span><span class="sysmon-value">${d.disk.percent}%</span></div>
-            <div class="sysmon-bar ${d.disk.percent > 90 ? 'hot' : d.disk.percent > 70 ? 'warm' : 'cool'}">${makeBar(d.disk.percent)}</div>
-            <div class="sysmon-label"><span>${formatBytesRaw(d.disk.used)} / ${formatBytesRaw(d.disk.total)}</span></div>
-          </div>
-          <div class="sysmon-item">
-            <div class="sysmon-label"><span>Load Avg</span></div>
-            <div class="sysmon-load">
-              <span>${d.load[0].toFixed(2)}</span>
-              <span style="opacity:0.6">${d.load[1].toFixed(2)}</span>
-              <span style="opacity:0.4">${d.load[2].toFixed(2)}</span>
-            </div>
-            <div class="sysmon-label"><span>${d.cpu.cores} cores</span></div>
-          </div>
-          <div class="sysmon-item">
-            <div class="sysmon-label"><span>Network</span></div>
-            <div class="sysmon-net">
-              <span class="rx">▼ ${formatBytesRaw(netSpeed.rx)}/s</span>
-              <span class="tx">▲ ${formatBytesRaw(netSpeed.tx)}/s</span>
-            </div>
-            <div class="sysmon-label"><span>Total: ▼${formatBytesRaw(d.net.rx)} ▲${formatBytesRaw(d.net.tx)}</span></div>
-          </div>
-        `;
-      } catch (err) {
-        console.error('Sysmon error:', err);
+      let netSpeed = { rx: 0, tx: 0 };
+      if (prevNet) {
+        netSpeed.rx = Math.max(0, d.net.rx - prevNet.rx);
+        netSpeed.tx = Math.max(0, d.net.tx - prevNet.tx);
       }
-    }
+      prevNet = { rx: d.net.rx, tx: d.net.tx };
 
-    function startDashboardRefresh() {
-      if (dashboardInterval) clearInterval(dashboardInterval);
-      loadDashboard();
-      dashboardInterval = setInterval(loadDashboard, 3000);
-      loadSysmon();
-      if (sysmonInterval) clearInterval(sysmonInterval);
-      sysmonInterval = setInterval(loadSysmon, 2000);
-    }
-
-    function stopDashboardRefresh() {
-      if (dashboardInterval) { clearInterval(dashboardInterval); dashboardInterval = null; }
-      if (sysmonInterval) { clearInterval(sysmonInterval); sysmonInterval = null; }
+      const tc = tempClass(d.temp);
+      const grid = document.getElementById('sysmon-grid');
+      grid.innerHTML = `
+        <div class="sysmon-item">
+          <div class="sysmon-label"><span>CPU</span><span class="sysmon-value">${d.cpu.percent}%</span></div>
+          <div class="sysmon-bar ${d.cpu.percent > 80 ? 'hot' : d.cpu.percent > 50 ? 'warm' : 'cool'}">${makeBar(d.cpu.percent)}</div>
+          <div class="sysmon-sparkline">${makeSparkline(cpuHistory)}</div>
+        </div>
+        <div class="sysmon-item">
+          <div class="sysmon-label"><span>Memory</span><span class="sysmon-value">${d.mem.percent}%</span></div>
+          <div class="sysmon-bar ${d.mem.percent > 85 ? 'hot' : d.mem.percent > 60 ? 'warm' : 'cool'}">${makeBar(d.mem.percent)}</div>
+          <div class="sysmon-sparkline">${makeSparkline(memHistory)}</div>
+          <div class="sysmon-label"><span>${formatBytes(d.mem.used)} / ${formatBytes(d.mem.total)}</span></div>
+        </div>
+        <div class="sysmon-item">
+          <div class="sysmon-label"><span>Temp</span></div>
+          <div class="sysmon-temp ${tc}">${d.temp}°C</div>
+          <div class="sysmon-bar ${tc}">${makeBar(Math.min(d.temp, 85) / 85 * 100)}</div>
+        </div>
+        <div class="sysmon-item">
+          <div class="sysmon-label"><span>Disk /</span><span class="sysmon-value">${d.disk.percent}%</span></div>
+          <div class="sysmon-bar ${d.disk.percent > 90 ? 'hot' : d.disk.percent > 70 ? 'warm' : 'cool'}">${makeBar(d.disk.percent)}</div>
+          <div class="sysmon-label"><span>${formatBytesRaw(d.disk.used)} / ${formatBytesRaw(d.disk.total)}</span></div>
+        </div>
+        <div class="sysmon-item">
+          <div class="sysmon-label"><span>Load Avg</span></div>
+          <div class="sysmon-load">
+            <span>${d.load[0].toFixed(2)}</span>
+            <span style="opacity:0.6">${d.load[1].toFixed(2)}</span>
+            <span style="opacity:0.4">${d.load[2].toFixed(2)}</span>
+          </div>
+          <div class="sysmon-label"><span>${d.cpu.cores} cores</span></div>
+        </div>
+        <div class="sysmon-item">
+          <div class="sysmon-label"><span>Network</span></div>
+          <div class="sysmon-net">
+            <span class="rx">▼ ${formatBytesRaw(netSpeed.rx)}/s</span>
+            <span class="tx">▲ ${formatBytesRaw(netSpeed.tx)}/s</span>
+          </div>
+          <div class="sysmon-label"><span>Total: ▼${formatBytesRaw(d.net.rx)} ▲${formatBytesRaw(d.net.tx)}</span></div>
+        </div>
+      `;
     }
 
     // --- Views ---
@@ -1885,7 +1946,6 @@
       document.querySelectorAll('.view-tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.view === view);
       });
-      // Reset inline styles from resizer dragging
       const tc = document.getElementById('terminal-container');
       const pc = document.getElementById('preview-container');
       tc.style.width = '';
@@ -1893,11 +1953,7 @@
       tc.style.flex = '';
       pc.style.flex = '';
       updateResizerClass();
-      if (view === 'dashboard') {
-        startDashboardRefresh();
-      } else {
-        stopDashboardRefresh();
-      }
+      dashboardVisible = (view === 'dashboard');
       setTimeout(() => { if (fitAddon) fitAddon.fit(); }, 50);
     }
 
@@ -2117,7 +2173,9 @@
       if (url) window.open(url, '_blank');
     });
 
-    document.getElementById('btn-refresh-ports').addEventListener('click', scanPorts);
+    document.getElementById('btn-refresh-ports').addEventListener('click', () => {
+      // Ports auto-update via status WebSocket
+    });
     document.getElementById('btn-refresh-preview').addEventListener('click', () => {
       const iframe = document.getElementById('preview-iframe');
       if (iframe.src) iframe.src = iframe.src;
@@ -2157,17 +2215,37 @@
       }
       if (fitAddon) setTimeout(() => fitAddon.fit(), 50);
     });
-    setInterval(scanPorts, 5000);
-    setInterval(refreshSessionSwitcher, 10000);
+    // --- Status WebSocket ---
+    function connectStatusWs() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      statusWs = new WebSocket(`${protocol}//${location.host}/status`);
+
+      statusWs.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'status') {
+            renderPorts(data.ports);
+            renderSessionSwitcher(data.sessions);
+            renderDashboard(data);
+            renderSysmon(data.system);
+          }
+        } catch {}
+      };
+
+      statusWs.onclose = () => {
+        // Reconnect after 3s
+        setTimeout(connectStatusWs, 3000);
+      };
+
+      statusWs.onerror = () => {};
+    }
 
     // --- Init ---
-    async function init() {
+    function init() {
       initTerminal();
       initResizer();
-      scanPorts();
-      refreshSessionSwitcher();
-      // Show dashboard as landing page
       setView('dashboard');
+      connectStatusWs();
     }
 
     init();

@@ -31,6 +31,7 @@ app.get('/api/health', (req, res) => {
 const { exec } = require('child_process');
 let sysCache = null;
 let prevCpu = null;
+let portsCache = [];
 
 function collectSystemStats() {
   const stats = {};
@@ -114,6 +115,21 @@ function collectSystemStats() {
 // Collect stats every 2s in background, never blocks request handling
 collectSystemStats();
 setInterval(collectSystemStats, 2000);
+
+// Collect listening ports every 5s
+function collectPorts() {
+  exec("ss -tlnH 2>/dev/null | awk '{print $4}'", { encoding: 'utf-8', timeout: 3000 }, (err, stdout) => {
+    if (!err && stdout) {
+      portsCache = [...new Set(
+        stdout.trim().split('\n')
+          .map(addr => { const parts = addr.split(':'); return parseInt(parts[parts.length - 1]); })
+          .filter(p => p && p !== parseInt(PORT) && p > 1024 && p < 65535)
+      )].sort((a, b) => a - b);
+    }
+  });
+}
+collectPorts();
+setInterval(collectPorts, 5000);
 
 app.get('/api/system', (req, res) => {
   if (sysCache) {
@@ -266,10 +282,50 @@ app.get('/api/stats', (req, res) => {
   });
 });
 
-// --- WebSocket: tmux attach ---
+// --- WebSocket: status push ---
+
+const statusClients = new Set();
+
+function getStatusPayload() {
+  const sessions = sessionManager.list();
+  const running = sessions.filter(s => s.alive).length;
+  return {
+    type: 'status',
+    stats: { total: sessions.length, running, stopped: sessions.length - running, uptime: Math.floor(process.uptime()) },
+    sessions,
+    system: sysCache || { cpu: { percent: 0, cores: 0 }, mem: { total: 0, used: 0, percent: 0 }, swap: { total: 0, used: 0, percent: 0 }, temp: 0, disk: { percent: 0, used: 0, total: 0 }, load: [0, 0, 0], net: { rx: 0, tx: 0 }, uptime: 0 },
+    ports: portsCache
+  };
+}
+
+// Push status to all connected status clients every 2s
+setInterval(() => {
+  if (statusClients.size === 0) return;
+  const payload = JSON.stringify(getStatusPayload());
+  for (const client of statusClients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(payload);
+    }
+  }
+}, 2000);
+
+// --- WebSocket: connection handler ---
 
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
+  const path = url.pathname;
+
+  // Status WebSocket
+  if (path === '/status') {
+    statusClients.add(ws);
+    // Send initial payload immediately
+    ws.send(JSON.stringify(getStatusPayload()));
+    ws.on('close', () => statusClients.delete(ws));
+    ws.on('error', () => statusClients.delete(ws));
+    return;
+  }
+
+  // Terminal WebSocket
   const sessionName = url.searchParams.get('session');
   const cols = parseInt(url.searchParams.get('cols')) || 80;
   const rows = parseInt(url.searchParams.get('rows')) || 24;
@@ -371,5 +427,5 @@ process.on('SIGTERM', () => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`ProjectGenerator running at http://0.0.0.0:${PORT}`);
+  console.log(`VibeManager running at http://0.0.0.0:${PORT}`);
 });
