@@ -1,0 +1,19 @@
+services:
+  vibemanager:
+    build: .
+    container_name: vibemanager
+    ports:
+      - "3004:3000"   # VibeManager web interface
+      - "8082:8080"   # VS Code (code-server)
+    volumes:
+      - workspace:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock  # Optional: for Docker-in-Docker
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
+volumes:
+  workspace:
