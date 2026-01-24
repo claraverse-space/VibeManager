@@ -1,0 +1,2176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ProjectGenerator</title>
+  <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #09090b;
+      --surface: #111113;
+      --surface2: #1a1a1f;
+      --surface3: #242429;
+      --accent: #6366f1;
+      --accent-dim: rgba(99, 102, 241, 0.12);
+      --text: #ececf1;
+      --text-dim: #63636e;
+      --danger: #ef4444;
+      --success: #22c55e;
+      --warn: #f59e0b;
+      --radius: 0px;
+    }
+
+    [data-theme="light"] {
+      --bg: #f8f8fa;
+      --surface: #ffffff;
+      --surface2: #f0f0f3;
+      --surface3: #e4e4e9;
+      --accent: #4f46e5;
+      --accent-dim: rgba(79, 70, 229, 0.08);
+      --text: #1a1a2e;
+      --text-dim: #71717a;
+      --danger: #dc2626;
+      --success: #16a34a;
+      --warn: #d97706;
+    }
+
+    body {
+      font-family: 'Satoshi', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      touch-action: manipulation;
+    }
+
+    /* Toolbar */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    .toolbar button {
+      background: var(--surface2);
+      color: var(--text);
+      border: none;
+      padding: 7px 14px;
+      border-radius: 0;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .toolbar button:hover { background: var(--accent-glow); }
+    .toolbar button:active { transform: scale(0.96); }
+    .toolbar button.active-session-btn {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .session-name {
+      flex: 1;
+      font-size: 12px;
+      color: var(--text-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 40px;
+      font-family: monospace;
+    }
+
+    .ports-section {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .port-btn {
+      background: var(--surface2) !important;
+      font-size: 11px !important;
+      padding: 4px 9px !important;
+      border-radius: 0 !important;
+      font-weight: 600 !important;
+      font-family: monospace !important;
+    }
+
+    .port-btn.active {
+      background: var(--accent) !important;
+      color: #fff !important;
+    }
+
+    /* Session switcher */
+    .session-switcher {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      max-width: 40%;
+      flex-shrink: 1;
+    }
+
+    .session-switcher::-webkit-scrollbar { display: none; }
+
+    .session-switcher:empty { display: none; }
+
+    .ss-btn {
+      background: var(--surface2);
+      color: var(--text-dim);
+      border: none;
+      padding: 4px 8px;
+      border-radius: 0;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.12s;
+      -webkit-tap-highlight-color: transparent;
+      max-width: 120px;
+      overflow: hidden;
+    }
+
+    .ss-btn:active { transform: scale(0.94); }
+    .ss-btn:hover { background: var(--surface3); }
+
+    .ss-btn.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .ss-btn.dead {
+      opacity: 0.4;
+    }
+
+    .ss-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--text-dim);
+    }
+
+    .ss-btn.active .ss-dot { background: var(--success); }
+    .ss-btn.dead .ss-dot { background: var(--danger); }
+
+    .ss-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    @media (max-width: 600px) {
+      .session-switcher { max-width: 35%; }
+      .ss-btn { padding: 4px 6px; font-size: 10px; max-width: 80px; }
+      .ss-name { display: none; }
+      .ss-btn::after {
+        content: attr(data-index);
+        font-size: 10px;
+      }
+    }
+
+    /* View tabs */
+    .view-tabs {
+      display: flex;
+      gap: 2px;
+      padding: 4px 12px;
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    .view-tab {
+      flex: 1;
+      padding: 6px 12px;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      color: var(--text-dim);
+      border-radius: 0;
+      -webkit-tap-highlight-color: transparent;
+      transition: all 0.2s;
+    }
+
+    .view-tab.active { color: var(--text); background: var(--surface2); }
+    .view-tab:hover:not(.active) { color: var(--text); }
+
+    /* Main content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Preview */
+    .preview-container {
+      flex: 1;
+      position: relative;
+      background: var(--bg);
+      min-height: 0;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .preview-container iframe { width: 100%; flex: 1; border: none; min-height: 0; }
+
+    .preview-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-dim);
+      font-size: 13px;
+      flex-direction: column;
+      gap: 10px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .preview-placeholder .icon { font-size: 32px; opacity: 0.2; }
+    .preview-placeholder .sub { font-size: 11px; opacity: 0.5; }
+
+    .preview-url-bar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    .preview-url-bar input {
+      flex: 1;
+      background: var(--bg);
+      border: none;
+      color: var(--text);
+      padding: 5px 10px;
+      border-radius: 0;
+      font-size: 12px;
+      font-family: monospace;
+      outline: none;
+      min-width: 0;
+    }
+
+    .preview-url-bar input:focus { box-shadow: 0 0 0 1px var(--accent-glow); }
+    .preview-url-bar input::placeholder { color: var(--text-dim); }
+
+    .preview-url-bar button {
+      background: var(--surface2);
+      color: var(--text-dim);
+      border: none;
+      padding: 5px 8px;
+      border-radius: 0;
+      cursor: pointer;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    .preview-url-bar button:hover { background: var(--accent); color: #fff; }
+
+    .preview-toolbar {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: flex;
+      gap: 4px;
+      z-index: 10;
+      opacity: 0.4;
+      transition: opacity 0.2s;
+    }
+
+    .preview-container:hover .preview-toolbar { opacity: 1; }
+
+    .preview-toolbar button {
+      background: var(--surface);
+      color: var(--text-dim);
+      border: none;
+      padding: 5px 9px;
+      border-radius: 0;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .preview-toolbar button:hover { background: var(--accent); color: #fff; }
+
+    /* Resizer */
+    .resizer {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      transition: background 0.15s;
+    }
+
+    /* Vertical resizer (mobile split) */
+    .resizer.vertical {
+      height: 8px;
+      cursor: row-resize;
+    }
+
+    .resizer.vertical::after {
+      content: '';
+      width: 32px;
+      height: 3px;
+      border-radius: 0;
+      background: var(--surface2);
+      transition: background 0.15s;
+    }
+
+    /* Horizontal resizer (desktop split) */
+    .resizer.horizontal {
+      width: 8px;
+      cursor: col-resize;
+    }
+
+    .resizer.horizontal::after {
+      content: '';
+      width: 3px;
+      height: 32px;
+      border-radius: 0;
+      background: var(--surface2);
+      transition: background 0.15s;
+    }
+
+    .resizer:hover::after { background: var(--accent); }
+
+    /* Virtual keys */
+    .virtual-keys {
+      display: flex;
+      gap: 4px;
+      padding: 5px 8px;
+      background: var(--surface);
+      flex-shrink: 0;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+
+    .virtual-keys::-webkit-scrollbar { display: none; }
+
+    .vkey {
+      background: var(--surface2);
+      color: var(--text-dim);
+      border: none;
+      padding: 5px 10px;
+      border-radius: 0;
+      font-size: 11px;
+      font-family: monospace;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      flex-shrink: 0;
+      transition: all 0.12s;
+    }
+
+    .vkey:active { background: var(--accent); color: #fff; transform: scale(0.93); }
+    .vkey.sticky.active { background: var(--danger); color: #fff; }
+
+    /* Terminal */
+    .terminal-container {
+      min-height: 0;
+      min-width: 0;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .terminal-container .xterm { flex: 1; padding: 4px 2px; min-height: 0; }
+
+    /* View modes */
+    .main-content[data-view="preview"] .terminal-container,
+    .main-content[data-view="preview"] .resizer { display: none; }
+    .main-content[data-view="preview"] .preview-container { flex: 1; width: 100%; height: 100%; }
+
+    .main-content[data-view="terminal"] .preview-container,
+    .main-content[data-view="terminal"] .resizer { display: none; }
+    .main-content[data-view="terminal"] .terminal-container { width: 100%; height: 100%; flex: 1; }
+
+    /* Split: desktop = side by side, mobile = stacked */
+    .main-content[data-view="split"] {
+      flex-direction: row;
+    }
+
+    .main-content[data-view="split"] .terminal-container {
+      width: 50%;
+      height: 100%;
+      flex: none;
+    }
+
+    .main-content[data-view="split"] .preview-container {
+      flex: 1;
+      height: 100%;
+    }
+
+    .main-content[data-view="split"] .resizer {
+      width: 8px;
+      height: 100%;
+    }
+
+    @media (max-width: 600px) {
+      .main-content[data-view="split"] {
+        flex-direction: column;
+      }
+
+      .main-content[data-view="split"] .terminal-container {
+        width: 100%;
+        height: 50%;
+        flex: none;
+      }
+
+      .main-content[data-view="split"] .preview-container {
+        width: 100%;
+        height: auto;
+        flex: 1;
+      }
+
+      .main-content[data-view="split"] .resizer {
+        width: 100%;
+        height: 8px;
+      }
+    }
+
+    /* Dashboard view mode */
+    .main-content[data-view="dashboard"] .terminal-container,
+    .main-content[data-view="dashboard"] .preview-container,
+    .main-content[data-view="dashboard"] .resizer { display: none; }
+    .main-content[data-view="dashboard"] .dashboard-container { display: flex; }
+
+    .main-content[data-view="terminal"] .dashboard-container,
+    .main-content[data-view="preview"] .dashboard-container,
+    .main-content[data-view="split"] .dashboard-container { display: none; }
+
+    /* Dashboard */
+    .dashboard-container {
+      flex: 1;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 16px;
+      gap: 16px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .dashboard-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .dashboard-header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .dashboard-header button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 0;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+
+    .dashboard-header button:active { transform: scale(0.96); }
+
+    .stats-bar {
+      display: flex;
+      gap: 16px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: var(--surface);
+      border-radius: 0;
+      flex: 1;
+      min-width: 100px;
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      font-family: monospace;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-item.running .stat-value { color: var(--success); }
+    .stat-item.stopped .stat-value { color: var(--text-dim); }
+    .stat-item.total .stat-value { color: var(--accent); }
+    .stat-item.uptime .stat-value { color: var(--warn); font-size: 16px; }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+
+    .session-card {
+      background: var(--surface);
+      padding: 16px;
+      transition: background 0.15s;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .session-card:hover {
+      background: var(--surface2);
+    }
+
+    .session-card.alive { }
+    .session-card.dead { opacity: 0.6; }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--text-dim);
+    }
+
+    .card-dot.alive {
+      background: var(--success);
+      box-shadow: 0 0 8px rgba(77, 255, 145, 0.4);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .card-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .card-path {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .card-meta {
+      font-size: 11px;
+      color: var(--text-dim);
+      display: flex;
+      gap: 12px;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: auto;
+    }
+
+    .card-actions button {
+      flex: 1;
+      padding: 7px 12px;
+      border: none;
+      border-radius: 0;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+
+    .card-actions button:active { transform: scale(0.95); }
+
+    .btn-attach {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-stop {
+      background: var(--surface2);
+      color: var(--text-dim);
+    }
+
+    .btn-stop:hover { background: var(--danger); color: #fff; }
+
+    .btn-revive {
+      background: var(--surface2);
+      color: var(--success);
+    }
+
+    .btn-revive:hover { background: rgba(77, 255, 145, 0.15); }
+
+    .btn-delete {
+      background: var(--surface2);
+      color: var(--text-dim);
+    }
+
+    .btn-delete:hover { background: var(--danger); color: #fff; }
+
+    .dashboard-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 60px 20px;
+      color: var(--text-dim);
+      text-align: center;
+    }
+
+    .dashboard-empty .icon { font-size: 40px; opacity: 0.3; }
+    .dashboard-empty p { font-size: 14px; }
+
+    @media (max-width: 600px) {
+      .dashboard-container { padding: 12px; gap: 12px; }
+      .stats-bar { gap: 8px; }
+      .stat-item { padding: 8px 12px; min-width: 80px; }
+      .stat-value { font-size: 18px; }
+      .cards-grid { grid-template-columns: 1fr; }
+      .dashboard-header h1 { font-size: 15px; }
+      .sysmon { padding: 12px; }
+      .sysmon-grid { grid-template-columns: 1fr; }
+    }
+
+    /* System Monitor */
+    .sysmon {
+      background: var(--surface);
+      border-radius: 0;
+      padding: 16px;
+      flex-shrink: 0;
+      margin-top: auto;
+    }
+
+    .sysmon-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+      margin-bottom: 12px;
+    }
+
+    .sysmon-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .sysmon-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .sysmon-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .sysmon-value {
+      font-family: monospace;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .sysmon-bar {
+      height: 14px;
+      font-family: monospace;
+      font-size: 12px;
+      line-height: 14px;
+      letter-spacing: -0.5px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .sysmon-bar .filled { color: var(--accent); }
+    .sysmon-bar .empty { color: var(--surface2); }
+    .sysmon-bar.hot .filled { color: var(--danger); }
+    .sysmon-bar.warm .filled { color: var(--warn); }
+    .sysmon-bar.cool .filled { color: var(--success); }
+
+    .sysmon-sparkline {
+      font-family: monospace;
+      font-size: 11px;
+      line-height: 14px;
+      letter-spacing: -1px;
+      color: var(--accent);
+      height: 14px;
+      overflow: hidden;
+      white-space: nowrap;
+      opacity: 0.8;
+    }
+
+    .sysmon-temp {
+      font-family: monospace;
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .sysmon-temp.cool { color: var(--success); }
+    .sysmon-temp.warm { color: var(--warn); }
+    .sysmon-temp.hot { color: var(--danger); }
+
+    .sysmon-load {
+      font-family: monospace;
+      font-size: 12px;
+      color: var(--text);
+      display: flex;
+      gap: 10px;
+    }
+
+    .sysmon-net {
+      font-family: monospace;
+      font-size: 11px;
+      color: var(--text-dim);
+      display: flex;
+      gap: 12px;
+    }
+
+    .sysmon-net .rx { color: var(--success); }
+    .sysmon-net .tx { color: var(--accent); }
+
+    /* Fullscreen */
+    .fullscreen-preview .toolbar,
+    .fullscreen-preview .view-tabs,
+    .fullscreen-preview .status-bar,
+    .fullscreen-preview .resizer,
+    .fullscreen-preview .terminal-container { display: none !important; }
+    .fullscreen-preview .main-content { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 900; }
+    .fullscreen-preview .preview-container { flex: 1; height: 100%; }
+    .fullscreen-preview .preview-toolbar { opacity: 1; }
+
+    /* Status bar */
+    .status-bar {
+      padding: 4px 12px;
+      background: var(--surface);
+      font-size: 10px;
+      color: var(--text-dim);
+      display: flex;
+      justify-content: space-between;
+      flex-shrink: 0;
+      font-family: monospace;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-right: 5px;
+      background: var(--text-dim);
+    }
+
+    .status-dot.connected { background: var(--success); box-shadow: 0 0 6px rgba(77, 255, 145, 0.4); }
+
+    /* Modals */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: var(--surface);
+      border-radius: 0;
+      width: 100%;
+      max-width: 480px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-header {
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-header h3 { font-size: 16px; font-weight: 600; }
+
+    .modal-header .close-btn {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 0;
+    }
+
+    .modal-header .close-btn:hover { background: var(--surface2); }
+
+    .modal-body { flex: 1; overflow-y: auto; padding: 0 16px 16px; -webkit-overflow-scrolling: touch; }
+
+    .modal-footer {
+      padding: 12px 16px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .modal-footer button, .modal-body button.action-btn {
+      padding: 9px 20px;
+      border-radius: 0;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.1s;
+    }
+
+    .modal-footer button:active { transform: scale(0.96); }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-cancel { background: var(--surface2); color: var(--text-dim); }
+    .btn-danger { background: var(--danger); color: #fff; }
+
+    /* Session list */
+    .session-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 0;
+      cursor: pointer;
+      transition: background 0.12s;
+      margin-bottom: 4px;
+    }
+
+    .session-item:hover { background: var(--surface2); }
+    .session-item.active { background: var(--accent-glow); }
+
+    .session-item .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .session-item .dot.alive { background: var(--success); }
+    .session-item .dot.dead { background: var(--text-dim); }
+
+    .session-item .info { flex: 1; min-width: 0; }
+    .session-item .info .name { font-size: 13px; font-weight: 500; }
+    .session-item .info .path { font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; }
+
+    .session-item .del-btn {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 0;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .session-item:hover .del-btn { opacity: 1; }
+    .session-item .del-btn:hover { color: var(--danger); }
+
+    /* New session form */
+    .form-group {
+      margin-bottom: 12px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+
+    .form-group input {
+      width: 100%;
+      background: var(--bg);
+      border: none;
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 0;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .form-group input:focus { box-shadow: 0 0 0 2px var(--accent-glow); }
+    .form-group input::placeholder { color: var(--text-dim); }
+
+    .path-picker {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg);
+      border-radius: 0;
+      padding: 4px 4px 4px 12px;
+    }
+
+    .path-picker .path-display {
+      flex: 1;
+      font-size: 12px;
+      font-family: monospace;
+      color: var(--text-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .path-picker button {
+      background: var(--surface2);
+      color: var(--text);
+      border: none;
+      padding: 6px 12px;
+      border-radius: 0;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    /* Folder browser (inside new session modal) */
+    .folder-browser {
+      background: var(--bg);
+      border-radius: 0;
+      margin-top: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .folder-browser-nav {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 10px;
+      background: var(--surface2);
+    }
+
+    .folder-browser-nav button {
+      background: var(--surface2);
+      color: var(--text);
+      border: none;
+      padding: 3px 8px;
+      border-radius: 0;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .folder-browser-nav .curr-path {
+      flex: 1;
+      font-size: 10px;
+      font-family: monospace;
+      color: var(--text-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .folder-browser .fb-item {
+      padding: 7px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 0;
+      margin: 2px 4px;
+    }
+
+    .folder-browser .fb-item:hover { background: var(--surface2); }
+    .folder-browser .fb-item.selected { background: var(--accent-glow); }
+
+    /* New folder inline */
+    .new-folder-inline {
+      display: flex;
+      gap: 4px;
+      padding: 6px 8px;
+      margin-top: 4px;
+    }
+
+    .new-folder-inline input {
+      flex: 1;
+      background: var(--surface);
+      border: none;
+      color: var(--text);
+      padding: 5px 8px;
+      border-radius: 0;
+      font-size: 11px;
+      outline: none;
+    }
+
+    .new-folder-inline button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 0;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .source-tab.active, .tool-tab.active {
+      background: var(--accent) !important;
+      color: #fff !important;
+    }
+
+    #btn-create-session.loading {
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    /* Mobile */
+    @media (max-width: 600px) {
+      .toolbar { padding: 6px 8px; gap: 6px; }
+      .toolbar button { padding: 6px 10px; font-size: 12px; }
+      .ports-section { display: none; }
+      .view-tab { padding: 6px 8px; font-size: 10px; }
+      .session-item .del-btn { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <button id="btn-sessions">Sessions</button>
+    <div class="session-switcher" id="session-switcher"></div>
+    <div class="session-name" id="session-name">No session</div>
+    <div class="ports-section">
+      <div id="ports-container"><span style="font-size:11px;color:var(--text-dim)">--</span></div>
+    </div>
+    <button id="btn-refresh-ports">Ports</button>
+    <button id="btn-theme" title="Toggle theme" style="font-size:15px;padding:7px 10px">◐</button>
+  </div>
+
+  <div class="view-tabs">
+    <button class="view-tab active" data-view="dashboard">Dashboard</button>
+    <button class="view-tab" data-view="terminal">Terminal</button>
+    <button class="view-tab" data-view="preview">Preview</button>
+    <button class="view-tab" data-view="split">Split</button>
+  </div>
+
+  <div class="main-content" id="main-content" data-view="dashboard">
+    <div class="dashboard-container" id="dashboard-container">
+      <div class="dashboard-header">
+        <h1>Projects</h1>
+        <button id="btn-new-from-dash" onclick="openNewSessionModal()">+ New Project</button>
+      </div>
+      <div class="stats-bar" id="stats-bar"></div>
+      <div class="cards-grid" id="cards-grid"></div>
+      <div class="sysmon" id="sysmon">
+        <div class="sysmon-title">System Monitor</div>
+        <div class="sysmon-grid" id="sysmon-grid"></div>
+      </div>
+    </div>
+
+    <div class="terminal-container" id="terminal-container">
+      <div class="virtual-keys" id="virtual-keys">
+        <button class="vkey" data-key="escape">Esc</button>
+        <button class="vkey" data-key="tab">Tab</button>
+        <button class="vkey sticky" data-key="ctrl" id="vkey-ctrl">Ctrl</button>
+        <button class="vkey" data-key="ctrl-c">^C</button>
+        <button class="vkey" data-key="ctrl-d">^D</button>
+        <button class="vkey" data-key="ctrl-z">^Z</button>
+        <button class="vkey" data-key="ctrl-l">^L</button>
+        <button class="vkey" data-key="ctrl-a">^A</button>
+        <button class="vkey" data-key="ctrl-e">^E</button>
+        <button class="vkey" data-key="up">&#9650;</button>
+        <button class="vkey" data-key="down">&#9660;</button>
+        <button class="vkey" data-key="left">&#9664;</button>
+        <button class="vkey" data-key="right">&#9654;</button>
+        <button class="vkey" data-key="pipe">|</button>
+        <button class="vkey" data-key="amp">&amp;</button>
+        <button class="vkey" data-key="tilde">~</button>
+        <button class="vkey" data-key="dash">-</button>
+        <button class="vkey" data-key="slash">/</button>
+        <button class="vkey" data-key="copy" style="margin-left:auto">Copy</button>
+        <button class="vkey" data-key="paste">Paste</button>
+      </div>
+    </div>
+
+    <div class="resizer" id="resizer"></div>
+
+    <div class="preview-container" id="preview-container">
+      <div class="preview-url-bar" id="preview-url-bar" style="display:none">
+        <input type="text" id="preview-url-input" placeholder="http://hostname:port/path">
+        <button id="btn-go-url" title="Go">&#9654;</button>
+        <button id="btn-refresh-preview" title="Reload">&#8635;</button>
+        <button id="btn-open-external" title="Open in browser">&#8599;</button>
+        <button id="btn-fullscreen" title="Fullscreen">&#9974;</button>
+      </div>
+      <div class="preview-placeholder" id="preview-placeholder">
+        <div class="icon">&#9881;</div>
+        <div>No preview active</div>
+        <div class="sub">Start a dev server and select a port</div>
+      </div>
+      <iframe id="preview-iframe" style="display:none" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span id="status-shell">--</span>
+    <span><span class="status-dot" id="status-dot"></span><span id="status-connection">Disconnected</span></span>
+  </div>
+
+  <!-- Sessions modal -->
+  <div class="modal-overlay" id="sessions-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Sessions</h3>
+        <button class="close-btn" id="sessions-close">&times;</button>
+      </div>
+      <div class="modal-body" id="sessions-list"></div>
+      <div class="modal-footer">
+        <button class="btn-primary" id="btn-new-session">+ New Session</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New session modal -->
+  <div class="modal-overlay" id="new-session-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>New Session</h3>
+        <button class="close-btn" id="new-session-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Session Name</label>
+          <input type="text" id="input-session-name" placeholder="my-project" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Source</label>
+          <div style="display:flex;gap:4px;margin-bottom:10px">
+            <button class="btn-cancel source-tab active" data-source="folder" id="src-folder-tab" style="flex:1;padding:6px;font-size:11px;text-align:center">Folder</button>
+            <button class="btn-cancel source-tab" data-source="git" id="src-git-tab" style="flex:1;padding:6px;font-size:11px;text-align:center">Git Clone</button>
+          </div>
+          <div id="source-folder">
+            <div class="folder-browser">
+              <div class="folder-browser-nav">
+                <button id="fb-up">&#8592;</button>
+                <span class="curr-path" id="fb-path">/home</span>
+              </div>
+              <div id="fb-list"></div>
+              <div class="new-folder-inline">
+                <input type="text" id="fb-new-folder" placeholder="New folder...">
+                <button id="fb-create">Create</button>
+              </div>
+            </div>
+          </div>
+          <div id="source-git" style="display:none">
+            <input type="text" id="input-git-url" placeholder="https://github.com/user/repo.git" style="width:100%;background:var(--bg);border:none;color:var(--text);padding:10px 12px;font-size:13px;outline:none;font-family:monospace" autocomplete="off">
+            <div style="font-size:10px;color:var(--text-dim);margin-top:6px;padding:0 2px">Clones into ~/repo-name. Supports any git URL (HTTPS, SSH).</div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Tool</label>
+          <div style="display:flex;gap:4px;margin-bottom:8px">
+            <button class="btn-cancel tool-tab active" data-tool="opencode" id="tool-opencode-tab" style="flex:1;padding:6px;font-size:11px;text-align:center">OpenCode</button>
+            <button class="btn-cancel tool-tab" data-tool="claude" id="tool-claude-tab" style="flex:1;padding:6px;font-size:11px;text-align:center">Claude</button>
+            <button class="btn-cancel tool-tab" data-tool="bash" id="tool-bash-tab" style="flex:1;padding:6px;font-size:11px;text-align:center">Bash</button>
+          </div>
+          <label id="autonomous-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text-dim);padding:4px 0">
+            <input type="checkbox" id="input-autonomous" checked style="accent-color:var(--accent);width:16px;height:16px;cursor:pointer">
+            <span>Autonomous mode <span style="font-size:10px;opacity:0.7">(--dangerously-skip-permissions)</span></span>
+          </label>
+        </div>
+        <div class="form-group" id="initial-prompt-group">
+          <label>Initial Task <span style="font-weight:400;color:var(--text-dim)">(optional)</span></label>
+          <textarea id="input-initial-prompt" placeholder="e.g. Build a REST API with Express and MongoDB..." style="width:100%;background:var(--bg);border:none;color:var(--text);padding:10px 12px;font-size:13px;outline:none;font-family:monospace;resize:vertical;min-height:60px;max-height:150px" autocomplete="off"></textarea>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px;padding:0 2px">Sent to the AI tool after startup. Leave empty to interact manually.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" id="new-session-cancel">Cancel</button>
+        <button class="btn-primary" id="btn-create-session">Create & Open</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+  <script>
+    let ws = null;
+    let term = null;
+    let fitAddon = null;
+    let currentSession = null;
+    let activePort = null;
+    let isFullscreen = false;
+    let ctrlActive = false;
+    let intentionalDisconnect = false;
+    let fbCurrentPath = '/home';
+
+    const isMobile = window.innerWidth <= 600;
+
+    // --- Terminal ---
+    function initTerminal() {
+      if (term) term.dispose();
+      const isLight = (localStorage.getItem('pg_theme') || 'dark') === 'light';
+      term = new Terminal({
+        cursorBlink: true,
+        fontSize: isMobile ? 13 : 14,
+        fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
+        theme: isLight
+          ? { background: '#f8f8fa', foreground: '#1a1a2e', cursor: '#4f46e5', selectionBackground: 'rgba(79,70,229,0.2)' }
+          : { background: '#09090b', foreground: '#ececf1', cursor: '#6366f1', selectionBackground: 'rgba(99,102,241,0.3)' },
+        scrollback: 5000,
+        convertEol: true,
+        cursorStyle: 'bar',
+        cursorWidth: 2
+      });
+      fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(document.getElementById('terminal-container'));
+      setTimeout(() => fitAddon.fit(), 50);
+
+      term.writeln('\x1b[38;2;108;99;255mProjectGenerator\x1b[0m');
+      term.writeln('\x1b[90mOpen Sessions to get started.\x1b[0m\r\n');
+
+      term.attachCustomKeyEventHandler((ev) => {
+        if (ctrlActive && ev.type === 'keydown' && ev.key.length === 1) {
+          const code = ev.key.toLowerCase().charCodeAt(0) - 96;
+          if (code > 0 && code < 27) {
+            sendKey(String.fromCharCode(code));
+            ctrlActive = false;
+            document.getElementById('vkey-ctrl').classList.remove('active');
+            return false;
+          }
+        }
+        return true;
+      });
+    }
+
+    function connectSession(sessionName) {
+      if (ws) { intentionalDisconnect = true; ws.close(); }
+      intentionalDisconnect = false;
+
+      setTimeout(() => fitAddon.fit(), 100);
+      const cols = term.cols;
+      const rows = term.rows;
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${location.host}?session=${encodeURIComponent(sessionName)}&cols=${cols}&rows=${rows}`;
+
+      ws = new WebSocket(wsUrl);
+      let suppressOutput = true;
+
+      ws.onopen = () => {
+        setConnected(true);
+        term.reset();
+        currentSession = sessionName;
+        document.getElementById('session-name').textContent = sessionName;
+        localStorage.setItem('pg_lastSession', sessionName);
+        refreshSessionSwitcher();
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'data') {
+          if (!suppressOutput) term.write(msg.data);
+        } else if (msg.type === 'attached') {
+          document.getElementById('status-shell').textContent = msg.shell;
+          document.getElementById('session-name').textContent = `${msg.session} - ${msg.projectPath}`;
+          // After attach, wait for tmux capability negotiation to finish,
+          // then unsuppress and force a clean redraw via resize
+          setTimeout(() => {
+            suppressOutput = false;
+            if (fitAddon) fitAddon.fit();
+            // Force tmux to redraw by sending resize
+            const dims = fitAddon ? { cols: term.cols, rows: term.rows } : { cols: 80, rows: 24 };
+            ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+          }, 150);
+        } else if (msg.type === 'detached') {
+          term.writeln(`\r\n\x1b[33mSession detached (${msg.reason})\x1b[0m`);
+          setConnected(false);
+          if (msg.reason === 'session_killed') {
+            term.writeln('\x1b[90mSession was terminated. Open Sessions to revive or create new.\x1b[0m');
+          }
+        } else if (msg.type === 'error') {
+          term.writeln(`\r\n\x1b[31m${msg.message}\x1b[0m`);
+          setConnected(false);
+        }
+      };
+
+      ws.onclose = () => {
+        setConnected(false);
+        if (!intentionalDisconnect && currentSession) {
+          // Auto-reconnect after 2s
+          setTimeout(() => {
+            if (!intentionalDisconnect && currentSession) {
+              term.writeln('\r\n\x1b[90mReconnecting...\x1b[0m');
+              connectSession(currentSession);
+            }
+          }, 2000);
+        }
+      };
+
+      ws.onerror = () => {};
+
+      term.onData(data => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'data', data }));
+        }
+      });
+
+      term.onResize(({ cols, rows }) => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+        }
+      });
+    }
+
+    function setConnected(connected) {
+      document.getElementById('status-connection').textContent = connected ? 'Connected' : 'Disconnected';
+      document.getElementById('status-dot').classList.toggle('connected', connected);
+    }
+
+    // --- Sessions UI ---
+    async function loadSessionsList() {
+      const list = document.getElementById('sessions-list');
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-dim);font-size:12px">Loading...</div>';
+      try {
+        const res = await fetch('/api/sessions');
+        const data = await res.json();
+        if (data.sessions.length === 0) {
+          list.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-dim);font-size:13px">No sessions yet.<br><span style="font-size:11px;opacity:0.6">Create one to get started.</span></div>';
+          return;
+        }
+        list.innerHTML = data.sessions
+          .sort((a, b) => new Date(b.lastAccessedAt) - new Date(a.lastAccessedAt))
+          .map(s => `
+            <div class="session-item ${s.name === currentSession ? 'active' : ''}" data-name="${s.name}">
+              <div class="dot ${s.alive ? 'alive' : 'dead'}"></div>
+              <div class="info" onclick="switchToSession('${s.name}')">
+                <div class="name">${s.name}</div>
+                <div class="path">${s.projectPath}</div>
+              </div>
+              <button class="del-btn" onclick="event.stopPropagation(); deleteSession('${s.name}')" title="Delete">&#10005;</button>
+            </div>
+          `).join('');
+      } catch (err) {
+        list.innerHTML = `<div style="padding:20px;text-align:center;color:var(--danger);font-size:12px">${err.message}</div>`;
+      }
+    }
+
+    async function switchToSession(name) {
+      document.getElementById('sessions-modal').classList.remove('open');
+      connectSession(name);
+      setView('terminal');
+    }
+
+    async function deleteSession(name) {
+      if (!confirm(`Delete session "${name}"? This will kill the terminal.`)) return;
+      try {
+        await fetch(`/api/sessions/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        if (name === currentSession) {
+          intentionalDisconnect = true;
+          if (ws) ws.close();
+          currentSession = null;
+          document.getElementById('session-name').textContent = 'No session';
+          term.clear();
+          term.writeln('\x1b[90mSession deleted.\x1b[0m');
+        }
+        loadSessionsList();
+      } catch (err) {
+        alert('Failed: ' + err.message);
+      }
+    }
+
+    // --- New Session ---
+    async function fbBrowse(dirPath) {
+      fbCurrentPath = dirPath;
+      document.getElementById('fb-path').textContent = dirPath;
+      const list = document.getElementById('fb-list');
+      list.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-dim);font-size:11px">...</div>';
+      try {
+        const res = await fetch(`/api/browse?path=${encodeURIComponent(dirPath)}`);
+        const data = await res.json();
+        if (data.error) { list.innerHTML = `<div style="padding:12px;color:var(--danger);font-size:11px">${data.error}</div>`; return; }
+        if (data.folders.length === 0) {
+          list.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-dim);font-size:11px">Empty</div>';
+        } else {
+          list.innerHTML = data.folders.map(f => {
+            const safePath = f.path.replace(/'/g, "\\'");
+            return `<div class="fb-item" onclick="fbBrowse('${safePath}')">&#128193; ${f.name}</div>`;
+          }).join('');
+        }
+      } catch (err) {
+        list.innerHTML = `<div style="padding:12px;color:var(--danger);font-size:11px">${err.message}</div>`;
+      }
+    }
+
+    async function fbCreateFolder() {
+      const input = document.getElementById('fb-new-folder');
+      const name = input.value.trim();
+      if (!name) return;
+      try {
+        const res = await fetch('/api/mkdir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ parentPath: fbCurrentPath, name })
+        });
+        const data = await res.json();
+        if (data.error) { alert(data.error); return; }
+        input.value = '';
+        fbBrowse(fbCurrentPath);
+      } catch (err) { alert(err.message); }
+    }
+
+    let sourceMode = 'folder'; // 'folder' or 'git'
+    let selectedTool = 'opencode'; // 'opencode', 'claude', or 'bash'
+
+    async function createSession() {
+      const btn = document.getElementById('btn-create-session');
+      let name = document.getElementById('input-session-name').value.trim();
+      let projectPath = fbCurrentPath;
+
+      if (sourceMode === 'git') {
+        const gitUrl = document.getElementById('input-git-url').value.trim();
+        if (!gitUrl) { alert('Enter a git URL'); return; }
+
+        btn.textContent = 'Cloning...';
+        btn.classList.add('loading');
+
+        try {
+          const cloneRes = await fetch('/api/clone', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gitUrl, name: name || undefined })
+          });
+          const cloneData = await cloneRes.json();
+          if (cloneData.error) {
+            // If directory exists, use it anyway
+            if (cloneData.path) {
+              projectPath = cloneData.path;
+              if (!name) name = cloneData.name;
+            } else {
+              alert(cloneData.error);
+              btn.textContent = 'Create & Open';
+              btn.classList.remove('loading');
+              return;
+            }
+          } else {
+            projectPath = cloneData.path;
+            if (!name) name = cloneData.name;
+          }
+        } catch (err) {
+          alert('Clone failed: ' + err.message);
+          btn.textContent = 'Create & Open';
+          btn.classList.remove('loading');
+          return;
+        }
+      }
+
+      if (!name) {
+        // Auto-generate name from path
+        name = projectPath.split('/').filter(Boolean).pop() || 'session';
+        name = name.replace(/[^a-zA-Z0-9_-]/g, '-');
+      }
+
+      if (!/^[a-zA-Z0-9_-]{1,50}$/.test(name)) { alert('Name: letters, numbers, dashes, underscores only (1-50 chars)'); btn.textContent = 'Create & Open'; btn.classList.remove('loading'); return; }
+
+      btn.textContent = 'Creating...';
+      btn.classList.add('loading');
+
+      const initialPrompt = selectedTool !== 'bash' ? document.getElementById('input-initial-prompt').value.trim() : '';
+      const autonomous = selectedTool !== 'bash' && document.getElementById('input-autonomous').checked;
+
+      try {
+        const res = await fetch('/api/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, projectPath, initialPrompt, shell: selectedTool, autonomous })
+        });
+        const data = await res.json();
+        if (data.error) { alert(data.error); btn.textContent = 'Create & Open'; btn.classList.remove('loading'); return; }
+
+        document.getElementById('new-session-modal').classList.remove('open');
+        document.getElementById('input-session-name').value = '';
+        document.getElementById('input-git-url').value = '';
+        document.getElementById('input-initial-prompt').value = '';
+        btn.textContent = 'Create & Open';
+        btn.classList.remove('loading');
+        connectSession(name);
+        setView('terminal');
+      } catch (err) {
+        alert('Failed: ' + err.message);
+        btn.textContent = 'Create & Open';
+        btn.classList.remove('loading');
+      }
+    }
+
+    // --- Ports ---
+    async function scanPorts() {
+      const container = document.getElementById('ports-container');
+      try {
+        const res = await fetch('/api/ports');
+        const data = await res.json();
+        if (data.ports.length === 0) {
+          container.innerHTML = '<span style="font-size:11px;color:var(--text-dim)">--</span>';
+        } else {
+          container.innerHTML = data.ports.map(p =>
+            `<button class="port-btn ${p === activePort ? 'active' : ''}" onclick="selectPort(${p})">${p}</button>`
+          ).join(' ');
+        }
+      } catch {
+        container.innerHTML = '<span style="font-size:11px;color:var(--danger)">err</span>';
+      }
+    }
+
+    function selectPort(port) {
+      activePort = port;
+      const url = `http://${location.hostname}:${port}`;
+      loadPreviewUrl(url);
+      document.querySelectorAll('.port-btn').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.textContent) === port);
+      });
+    }
+
+    function loadPreviewUrl(url) {
+      const iframe = document.getElementById('preview-iframe');
+      const placeholder = document.getElementById('preview-placeholder');
+      const urlBar = document.getElementById('preview-url-bar');
+      const urlInput = document.getElementById('preview-url-input');
+      iframe.src = url;
+      iframe.style.display = 'block';
+      placeholder.style.display = 'none';
+      urlBar.style.display = 'flex';
+      urlInput.value = url;
+    }
+
+    // --- Dashboard ---
+    let dashboardInterval = null;
+
+    function relativeTime(isoString) {
+      if (!isoString) return '';
+      const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+      if (diff < 60) return 'just now';
+      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+      if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+      return Math.floor(diff / 86400) + 'd ago';
+    }
+
+    function formatUptime(seconds) {
+      if (seconds < 60) return seconds + 's';
+      if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
+      if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
+      return Math.floor(seconds / 86400) + 'd ' + Math.floor((seconds % 86400) / 3600) + 'h';
+    }
+
+    function shortenPath(p) {
+      const home = '/home/claraverse';
+      if (p.startsWith(home)) return '~' + p.slice(home.length);
+      return p;
+    }
+
+    async function loadDashboard() {
+      try {
+        const res = await fetch('/api/stats');
+        const data = await res.json();
+
+        document.getElementById('stats-bar').innerHTML = `
+          <div class="stat-item running"><div><div class="stat-value">${data.running}</div><div class="stat-label">Running</div></div></div>
+          <div class="stat-item stopped"><div><div class="stat-value">${data.stopped}</div><div class="stat-label">Stopped</div></div></div>
+          <div class="stat-item total"><div><div class="stat-value">${data.total}</div><div class="stat-label">Total</div></div></div>
+          <div class="stat-item uptime"><div><div class="stat-value">${formatUptime(data.uptime)}</div><div class="stat-label">Uptime</div></div></div>
+        `;
+
+        const grid = document.getElementById('cards-grid');
+        if (data.sessions.length === 0) {
+          grid.innerHTML = `
+            <div class="dashboard-empty" style="grid-column: 1 / -1;">
+              <div class="icon">&#9881;</div>
+              <p>No projects yet</p>
+              <p style="font-size:12px;opacity:0.5">Click "+ New Project" to start building</p>
+            </div>
+          `;
+          return;
+        }
+
+        grid.innerHTML = data.sessions
+          .sort((a, b) => (b.alive ? 1 : 0) - (a.alive ? 1 : 0) || new Date(b.lastAccessedAt) - new Date(a.lastAccessedAt))
+          .map(s => `
+            <div class="session-card ${s.alive ? 'alive' : 'dead'}">
+              <div class="card-header">
+                <div class="card-dot ${s.alive ? 'alive' : ''}"></div>
+                <span class="card-name">${s.name}</span>
+              </div>
+              <div class="card-path">${shortenPath(s.projectPath)}</div>
+              <div class="card-meta">
+                <span>${s.shell}</span>
+                <span>${relativeTime(s.lastAccessedAt)}</span>
+              </div>
+              <div class="card-actions">
+                ${s.alive ? `
+                  <button class="btn-attach" onclick="attachFromDash('${s.name}')">Attach</button>
+                  <button class="btn-stop" onclick="stopFromDash('${s.name}')">Stop</button>
+                ` : `
+                  <button class="btn-revive" onclick="reviveFromDash('${s.name}')">Revive</button>
+                  <button class="btn-delete" onclick="deleteFromDash('${s.name}')">Delete</button>
+                `}
+              </div>
+            </div>
+          `).join('');
+        refreshSessionSwitcher();
+      } catch (err) {
+        console.error('Dashboard load error:', err);
+      }
+    }
+
+    function attachFromDash(name) {
+      connectSession(name);
+      setView('terminal');
+    }
+
+    async function stopFromDash(name) {
+      if (!confirm(`Stop session "${name}"? The tmux process will be killed but you can revive it later.`)) return;
+      try {
+        await fetch(`/api/sessions/${encodeURIComponent(name)}/stop`, { method: 'POST' });
+        if (currentSession === name) {
+          intentionalDisconnect = true;
+          if (ws) ws.close();
+          currentSession = null;
+          document.getElementById('session-name').textContent = 'No session';
+        }
+        loadDashboard();
+      } catch (err) {
+        alert('Failed to stop: ' + err.message);
+      }
+    }
+
+    async function reviveFromDash(name) {
+      try {
+        await fetch(`/api/sessions/${encodeURIComponent(name)}/revive`, { method: 'POST' });
+        loadDashboard();
+      } catch (err) {
+        alert('Failed to revive: ' + err.message);
+      }
+    }
+
+    async function deleteFromDash(name) {
+      if (!confirm(`Permanently delete session "${name}"? This cannot be undone.`)) return;
+      try {
+        await fetch(`/api/sessions/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        if (currentSession === name) {
+          intentionalDisconnect = true;
+          if (ws) ws.close();
+          currentSession = null;
+          document.getElementById('session-name').textContent = 'No session';
+        }
+        loadDashboard();
+      } catch (err) {
+        alert('Failed to delete: ' + err.message);
+      }
+    }
+
+    // --- Session Switcher ---
+    const sessionIcons = ['◆', '●', '■', '▲', '★', '◈', '◉', '▣', '◍', '⬟'];
+
+    async function refreshSessionSwitcher() {
+      try {
+        const res = await fetch('/api/sessions');
+        const data = await res.json();
+        const container = document.getElementById('session-switcher');
+        const alive = (data.sessions || []).filter(s => s.alive)
+          .sort((a, b) => new Date(b.lastAccessedAt) - new Date(a.lastAccessedAt))
+          .slice(0, 3);
+        if (alive.length < 2) {
+          container.innerHTML = '';
+          return;
+        }
+        container.innerHTML = alive.map((s, i) => {
+          const isActive = s.name === currentSession;
+          const icon = sessionIcons[i % sessionIcons.length];
+          return `<button class="ss-btn ${isActive ? 'active' : ''}" data-index="${i + 1}" onclick="quickSwitch('${s.name}', true)" title="${s.name}"><span class="ss-dot"></span><span class="ss-name">${icon} ${s.name}</span></button>`;
+        }).join('');
+      } catch {}
+    }
+
+    function quickSwitch(name) {
+      if (name === currentSession) return;
+      connectSession(name);
+      setView('terminal');
+    }
+
+    function openNewSessionModal() {
+      document.getElementById('new-session-modal').classList.add('open');
+      fbBrowse(fbCurrentPath || '/home');
+    }
+
+    // --- System Monitor ---
+    const cpuHistory = [];
+    const memHistory = [];
+    let prevNet = null;
+    let sysmonInterval = null;
+
+    const SPARK_CHARS = '▁▂▃▄▅▆▇█';
+    const BAR_FILLED = '█';
+    const BAR_HALF = '▌';
+    const BAR_EMPTY = '░';
+
+    function makeBar(percent, width = 20) {
+      const filled = Math.round(percent / 100 * width);
+      const empty = width - filled;
+      return `<span class="filled">${BAR_FILLED.repeat(filled)}</span><span class="empty">${BAR_EMPTY.repeat(empty)}</span>`;
+    }
+
+    function makeSparkline(history, maxLen = 24) {
+      const data = history.slice(-maxLen);
+      if (data.length === 0) return '';
+      const max = Math.max(...data, 1);
+      return data.map(v => {
+        const idx = Math.min(Math.floor(v / max * (SPARK_CHARS.length - 1)), SPARK_CHARS.length - 1);
+        return SPARK_CHARS[idx];
+      }).join('');
+    }
+
+    function formatBytes(kb) {
+      if (kb < 1024) return kb + ' KB';
+      if (kb < 1048576) return (kb / 1024).toFixed(1) + ' MB';
+      return (kb / 1048576).toFixed(1) + ' GB';
+    }
+
+    function formatBytesRaw(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+      if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+      return (bytes / 1073741824).toFixed(1) + ' GB';
+    }
+
+    function tempClass(t) {
+      if (t >= 70) return 'hot';
+      if (t >= 55) return 'warm';
+      return 'cool';
+    }
+
+    async function loadSysmon() {
+      try {
+        const res = await fetch('/api/system');
+        const d = await res.json();
+        if (d.error) return;
+
+        cpuHistory.push(d.cpu.percent);
+        if (cpuHistory.length > 30) cpuHistory.shift();
+        memHistory.push(d.mem.percent);
+        if (memHistory.length > 30) memHistory.shift();
+
+        // Net speed calculation
+        let netSpeed = { rx: 0, tx: 0 };
+        if (prevNet) {
+          netSpeed.rx = Math.max(0, d.net.rx - prevNet.rx);
+          netSpeed.tx = Math.max(0, d.net.tx - prevNet.tx);
+        }
+        prevNet = { rx: d.net.rx, tx: d.net.tx };
+
+        const tc = tempClass(d.temp);
+        const grid = document.getElementById('sysmon-grid');
+        grid.innerHTML = `
+          <div class="sysmon-item">
+            <div class="sysmon-label"><span>CPU</span><span class="sysmon-value">${d.cpu.percent}%</span></div>
+            <div class="sysmon-bar ${d.cpu.percent > 80 ? 'hot' : d.cpu.percent > 50 ? 'warm' : 'cool'}">${makeBar(d.cpu.percent)}</div>
+            <div class="sysmon-sparkline">${makeSparkline(cpuHistory)}</div>
+          </div>
+          <div class="sysmon-item">
+            <div class="sysmon-label"><span>Memory</span><span class="sysmon-value">${d.mem.percent}%</span></div>
+            <div class="sysmon-bar ${d.mem.percent > 85 ? 'hot' : d.mem.percent > 60 ? 'warm' : 'cool'}">${makeBar(d.mem.percent)}</div>
+            <div class="sysmon-sparkline">${makeSparkline(memHistory)}</div>
+            <div class="sysmon-label"><span>${formatBytes(d.mem.used)} / ${formatBytes(d.mem.total)}</span></div>
+          </div>
+          <div class="sysmon-item">
+            <div class="sysmon-label"><span>Temp</span></div>
+            <div class="sysmon-temp ${tc}">${d.temp}°C</div>
+            <div class="sysmon-bar ${tc}">${makeBar(Math.min(d.temp, 85) / 85 * 100)}</div>
+          </div>
+          <div class="sysmon-item">
+            <div class="sysmon-label"><span>Disk /</span><span class="sysmon-value">${d.disk.percent}%</span></div>
+            <div class="sysmon-bar ${d.disk.percent > 90 ? 'hot' : d.disk.percent > 70 ? 'warm' : 'cool'}">${makeBar(d.disk.percent)}</div>
+            <div class="sysmon-label"><span>${formatBytesRaw(d.disk.used)} / ${formatBytesRaw(d.disk.total)}</span></div>
+          </div>
+          <div class="sysmon-item">
+            <div class="sysmon-label"><span>Load Avg</span></div>
+            <div class="sysmon-load">
+              <span>${d.load[0].toFixed(2)}</span>
+              <span style="opacity:0.6">${d.load[1].toFixed(2)}</span>
+              <span style="opacity:0.4">${d.load[2].toFixed(2)}</span>
+            </div>
+            <div class="sysmon-label"><span>${d.cpu.cores} cores</span></div>
+          </div>
+          <div class="sysmon-item">
+            <div class="sysmon-label"><span>Network</span></div>
+            <div class="sysmon-net">
+              <span class="rx">▼ ${formatBytesRaw(netSpeed.rx)}/s</span>
+              <span class="tx">▲ ${formatBytesRaw(netSpeed.tx)}/s</span>
+            </div>
+            <div class="sysmon-label"><span>Total: ▼${formatBytesRaw(d.net.rx)} ▲${formatBytesRaw(d.net.tx)}</span></div>
+          </div>
+        `;
+      } catch (err) {
+        console.error('Sysmon error:', err);
+      }
+    }
+
+    function startDashboardRefresh() {
+      if (dashboardInterval) clearInterval(dashboardInterval);
+      loadDashboard();
+      dashboardInterval = setInterval(loadDashboard, 3000);
+      loadSysmon();
+      if (sysmonInterval) clearInterval(sysmonInterval);
+      sysmonInterval = setInterval(loadSysmon, 2000);
+    }
+
+    function stopDashboardRefresh() {
+      if (dashboardInterval) { clearInterval(dashboardInterval); dashboardInterval = null; }
+      if (sysmonInterval) { clearInterval(sysmonInterval); sysmonInterval = null; }
+    }
+
+    // --- Views ---
+    function setView(view) {
+      document.getElementById('main-content').dataset.view = view;
+      document.querySelectorAll('.view-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.view === view);
+      });
+      // Reset inline styles from resizer dragging
+      const tc = document.getElementById('terminal-container');
+      const pc = document.getElementById('preview-container');
+      tc.style.width = '';
+      tc.style.height = '';
+      tc.style.flex = '';
+      pc.style.flex = '';
+      updateResizerClass();
+      if (view === 'dashboard') {
+        startDashboardRefresh();
+      } else {
+        stopDashboardRefresh();
+      }
+      setTimeout(() => { if (fitAddon) fitAddon.fit(); }, 50);
+    }
+
+    document.querySelectorAll('.view-tab').forEach(tab => {
+      tab.addEventListener('click', () => setView(tab.dataset.view));
+    });
+
+    // --- Fullscreen ---
+    document.getElementById('btn-fullscreen').addEventListener('click', () => {
+      isFullscreen = !isFullscreen;
+      document.body.classList.toggle('fullscreen-preview', isFullscreen);
+      document.getElementById('btn-fullscreen').innerHTML = isFullscreen ? '&#10005;' : '&#9974;';
+    });
+
+    // --- Resizer ---
+    function isHorizontalSplit() {
+      const main = document.getElementById('main-content');
+      return main.dataset.view === 'split' && window.innerWidth > 600;
+    }
+
+    function updateResizerClass() {
+      const resizer = document.getElementById('resizer');
+      resizer.className = 'resizer ' + (isHorizontalSplit() ? 'horizontal' : 'vertical');
+    }
+
+    function initResizer() {
+      const resizer = document.getElementById('resizer');
+      const preview = document.getElementById('preview-container');
+      const terminal = document.getElementById('terminal-container');
+      let startPos, startTermSize, startPreviewSize;
+
+      updateResizerClass();
+
+      function start(pos) {
+        startPos = pos;
+        if (isHorizontalSplit()) {
+          startTermSize = terminal.offsetWidth;
+          startPreviewSize = preview.offsetWidth;
+        } else {
+          startTermSize = terminal.offsetHeight;
+          startPreviewSize = preview.offsetHeight;
+        }
+      }
+
+      function drag(pos) {
+        const delta = pos - startPos;
+        if (isHorizontalSplit()) {
+          terminal.style.width = Math.max(100, startTermSize + delta) + 'px';
+          terminal.style.flex = 'none';
+          preview.style.flex = '1';
+        } else {
+          terminal.style.height = Math.max(60, startTermSize + delta) + 'px';
+          terminal.style.flex = 'none';
+          preview.style.flex = '1';
+        }
+      }
+
+      function stop() {
+        document.removeEventListener('mousemove', mm);
+        document.removeEventListener('mouseup', mu);
+        document.removeEventListener('touchmove', tm);
+        document.removeEventListener('touchend', tu);
+        if (fitAddon) fitAddon.fit();
+      }
+
+      function mm(e) { drag(isHorizontalSplit() ? e.clientX : e.clientY); }
+      function mu() { stop(); }
+      function tm(e) { e.preventDefault(); drag(isHorizontalSplit() ? e.touches[0].clientX : e.touches[0].clientY); }
+      function tu() { stop(); }
+
+      resizer.addEventListener('mousedown', e => {
+        start(isHorizontalSplit() ? e.clientX : e.clientY);
+        document.addEventListener('mousemove', mm);
+        document.addEventListener('mouseup', mu);
+        e.preventDefault();
+      });
+
+      resizer.addEventListener('touchstart', e => {
+        start(isHorizontalSplit() ? e.touches[0].clientX : e.touches[0].clientY);
+        document.addEventListener('touchmove', tm, { passive: false });
+        document.addEventListener('touchend', tu);
+        e.preventDefault();
+      });
+    }
+
+    // --- Virtual Keys ---
+    const keyMap = {
+      'escape': '\x1b', 'tab': '\t',
+      'ctrl-c': '\x03', 'ctrl-d': '\x04', 'ctrl-z': '\x1a',
+      'ctrl-l': '\x0c', 'ctrl-a': '\x01', 'ctrl-e': '\x05',
+      'up': '\x1b[A', 'down': '\x1b[B', 'left': '\x1b[D', 'right': '\x1b[C',
+      'pipe': '|', 'amp': '&', 'tilde': '~', 'dash': '-', 'slash': '/'
+    };
+
+    document.getElementById('virtual-keys').addEventListener('click', (e) => {
+      const btn = e.target.closest('.vkey');
+      if (!btn) return;
+      const key = btn.dataset.key;
+      if (key === 'ctrl') { ctrlActive = !ctrlActive; btn.classList.toggle('active', ctrlActive); return; }
+      if (key === 'copy') { termCopy(); return; }
+      if (key === 'paste') { termPaste(); return; }
+      const seq = keyMap[key];
+      if (seq) sendKey(seq);
+      if (ctrlActive) { ctrlActive = false; document.getElementById('vkey-ctrl').classList.remove('active'); }
+    });
+
+    async function termCopy() {
+      if (!term) return;
+      const sel = term.getSelection();
+      if (sel) {
+        try {
+          await navigator.clipboard.writeText(sel);
+        } catch {
+          // Fallback for older browsers
+          const ta = document.createElement('textarea');
+          ta.value = sel;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+      }
+    }
+
+    async function termPaste() {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text) sendKey(text);
+      } catch {
+        // Clipboard API not available
+      }
+      if (term) term.focus();
+    }
+
+    function sendKey(seq) {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'data', data: seq }));
+      if (term) term.focus();
+    }
+
+    // --- Event Listeners ---
+    document.getElementById('btn-sessions').addEventListener('click', () => {
+      setView('dashboard');
+    });
+
+    document.getElementById('sessions-close').addEventListener('click', () => {
+      document.getElementById('sessions-modal').classList.remove('open');
+    });
+
+    document.getElementById('btn-new-session').addEventListener('click', () => {
+      document.getElementById('sessions-modal').classList.remove('open');
+      openNewSessionModal();
+    });
+
+    document.getElementById('new-session-close').addEventListener('click', () => {
+      document.getElementById('new-session-modal').classList.remove('open');
+    });
+
+    document.getElementById('new-session-cancel').addEventListener('click', () => {
+      document.getElementById('new-session-modal').classList.remove('open');
+    });
+
+    document.getElementById('btn-create-session').addEventListener('click', createSession);
+
+    document.getElementById('fb-up').addEventListener('click', () => {
+      const parent = fbCurrentPath.split('/').slice(0, -1).join('/') || '/';
+      fbBrowse(parent);
+    });
+
+    document.getElementById('fb-create').addEventListener('click', fbCreateFolder);
+    document.getElementById('fb-new-folder').addEventListener('keydown', e => { if (e.key === 'Enter') fbCreateFolder(); });
+
+    // Source tab switching
+    document.querySelectorAll('.source-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        sourceMode = tab.dataset.source;
+        document.querySelectorAll('.source-tab').forEach(t => t.classList.toggle('active', t.dataset.source === sourceMode));
+        document.getElementById('source-folder').style.display = sourceMode === 'folder' ? 'block' : 'none';
+        document.getElementById('source-git').style.display = sourceMode === 'git' ? 'block' : 'none';
+      });
+    });
+
+    // Tool tab switching
+    document.querySelectorAll('.tool-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        selectedTool = tab.dataset.tool;
+        document.querySelectorAll('.tool-tab').forEach(t => t.classList.toggle('active', t.dataset.tool === selectedTool));
+        const isAI = selectedTool !== 'bash';
+        document.getElementById('autonomous-label').style.display = isAI ? 'flex' : 'none';
+        document.getElementById('initial-prompt-group').style.display = isAI ? 'block' : 'none';
+      });
+    });
+
+    // Git URL auto-fill name
+    document.getElementById('input-git-url').addEventListener('input', (e) => {
+      const nameInput = document.getElementById('input-session-name');
+      if (!nameInput.value) {
+        const match = e.target.value.match(/\/([^\/]+?)(\.git)?$/);
+        if (match) nameInput.value = match[1].replace(/[^a-zA-Z0-9_-]/g, '-');
+      }
+    });
+
+    // URL bar
+    document.getElementById('btn-go-url').addEventListener('click', () => {
+      const url = document.getElementById('preview-url-input').value.trim();
+      if (url) loadPreviewUrl(url);
+    });
+
+    document.getElementById('preview-url-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const url = e.target.value.trim();
+        if (url) loadPreviewUrl(url);
+      }
+    });
+
+    document.getElementById('btn-open-external').addEventListener('click', () => {
+      const url = document.getElementById('preview-url-input').value.trim();
+      if (url) window.open(url, '_blank');
+    });
+
+    document.getElementById('btn-refresh-ports').addEventListener('click', scanPorts);
+    document.getElementById('btn-refresh-preview').addEventListener('click', () => {
+      const iframe = document.getElementById('preview-iframe');
+      if (iframe.src) iframe.src = iframe.src;
+    });
+
+    // Theme toggle
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('pg_theme', theme);
+      // Update terminal theme
+      if (term) {
+        term.options.theme = theme === 'light'
+          ? { background: '#f8f8fa', foreground: '#1a1a2e', cursor: '#4f46e5', selectionBackground: 'rgba(79,70,229,0.2)' }
+          : { background: '#09090b', foreground: '#ececf1', cursor: '#6366f1', selectionBackground: 'rgba(99,102,241,0.3)' };
+      }
+    }
+
+    document.getElementById('btn-theme').addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      applyTheme(current === 'dark' ? 'light' : 'dark');
+    });
+
+    // Load saved theme
+    const savedTheme = localStorage.getItem('pg_theme') || 'dark';
+    if (savedTheme === 'light') applyTheme('light');
+
+    window.addEventListener('resize', () => {
+      updateResizerClass();
+      // Reset inline resizer styles when orientation changes
+      const tc = document.getElementById('terminal-container');
+      const pc = document.getElementById('preview-container');
+      if (document.getElementById('main-content').dataset.view === 'split') {
+        tc.style.width = '';
+        tc.style.height = '';
+        tc.style.flex = '';
+        pc.style.flex = '';
+      }
+      if (fitAddon) setTimeout(() => fitAddon.fit(), 50);
+    });
+    setInterval(scanPorts, 5000);
+    setInterval(refreshSessionSwitcher, 10000);
+
+    // --- Init ---
+    async function init() {
+      initTerminal();
+      initResizer();
+      scanPorts();
+      refreshSessionSwitcher();
+      // Show dashboard as landing page
+      setView('dashboard');
+    }
+
+    init();
+  </script>
+</body>
+</html>

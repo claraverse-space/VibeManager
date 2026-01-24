@@ -1,0 +1,15 @@
+{
+  "name": "project-generator",
+  "version": "1.0.0",
+  "description": "Web-based dev environment with OpenCode terminal and project preview",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-pty": "^1.0.0",
+    "ws": "^8.16.0"
+  }
+}
