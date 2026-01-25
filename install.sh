@@ -525,17 +525,17 @@ update() {
     # Pull latest changes
     if git rev-parse --git-dir > /dev/null 2>&1; then
         log_info "Pulling latest changes..."
-        git fetch origin
+        git fetch origin 2>/dev/null
         LOCAL=$(git rev-parse HEAD)
         REMOTE=$(git rev-parse origin/master 2>/dev/null || git rev-parse origin/main 2>/dev/null)
 
         if [ "$LOCAL" = "$REMOTE" ]; then
             log_success "Already up to date!"
-            exit 0
+            # Still check dependencies and restart service
+        else
+            git pull origin master 2>/dev/null || git pull origin main 2>/dev/null
+            log_success "Code updated"
         fi
-
-        git pull origin master 2>/dev/null || git pull origin main 2>/dev/null
-        log_success "Code updated"
     else
         log_warn "Not a git repository, downloading fresh copy..."
         cd ..
@@ -554,27 +554,27 @@ update() {
         log_info "Updating dependencies..."
         npm install
 
-        # Restart service
+        # Check and install code-server if missing
+        if ! check_command code-server; then
+            log_info "Installing code-server..."
+            if curl -fsSL https://code-server.dev/install.sh | sh 2>/dev/null; then
+                log_success "code-server installed (system)"
+            else
+                log_info "System install failed, installing to user space..."
+                install_code_server_user
+            fi
+        fi
+
+        # Recreate service file to ensure proper PATH/env vars
         OS=$(detect_os)
         case $OS in
             linux|wsl)
-                if systemctl is-active --quiet vibemanager 2>/dev/null; then
-                    log_info "Restarting systemd service..."
-                    sudo systemctl restart vibemanager
-                    log_success "Service restarted"
-                else
-                    log_warn "Service not running. Start with: sudo systemctl start vibemanager"
-                fi
+                log_info "Updating systemd service..."
+                create_systemd_service
                 ;;
             macos)
-                if launchctl list | grep -q vibemanager 2>/dev/null; then
-                    log_info "Restarting launchd service..."
-                    launchctl stop com.vibemanager 2>/dev/null || true
-                    launchctl start com.vibemanager
-                    log_success "Service restarted"
-                else
-                    log_warn "Service not running. Start with: launchctl start com.vibemanager"
-                fi
+                log_info "Updating launchd service..."
+                create_launchd_service
                 ;;
         esac
     fi
