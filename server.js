@@ -47,14 +47,37 @@ function startCodeServer() {
   const workspaceDir = process.env.HOME || '/home';
   console.log(`Starting code-server on port ${CODE_PORT}...`);
 
+  // Create env without PORT to prevent code-server from using it
+  const codeServerEnv = { ...process.env };
+  delete codeServerEnv.PORT;
+
   codeServerProcess = spawn(codeServerPath, [
     '--bind-addr', `0.0.0.0:${CODE_PORT}`,
     '--auth', 'none',
     '--disable-telemetry',
     workspaceDir
   ], {
-    stdio: 'ignore',
-    detached: true
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
+    env: codeServerEnv
+  });
+
+  codeServerProcess.stdout.on('data', (data) => {
+    console.log(`code-server: ${data.toString().trim()}`);
+  });
+
+  codeServerProcess.stderr.on('data', (data) => {
+    console.log(`code-server: ${data.toString().trim()}`);
+  });
+
+  codeServerProcess.on('error', (err) => {
+    console.error(`code-server failed to start: ${err.message}`);
+  });
+
+  codeServerProcess.on('exit', (code) => {
+    if (code !== 0 && code !== null) {
+      console.error(`code-server exited with code ${code}`);
+    }
   });
 
   codeServerProcess.unref();
