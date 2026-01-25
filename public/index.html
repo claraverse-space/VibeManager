@@ -1642,16 +1642,18 @@
       newWs.onerror = () => {};
     }
 
+    let codeEditorLoaded = false;
+
     function setConnected(connected) {
       document.getElementById('status-connection').textContent = connected ? 'Connected' : 'Disconnected';
       document.getElementById('status-dot').classList.toggle('connected', connected);
 
-      // Update code iframe when connected/disconnected
-      if (connected && currentProjectPath) {
-        loadCodeEditor(currentProjectPath);
-      } else {
+      // Reset code editor state when disconnected
+      if (!connected) {
+        codeEditorLoaded = false;
         const codeIframe = document.getElementById('code-iframe');
         const codePlaceholder = document.getElementById('code-placeholder');
+        codeIframe.src = '';
         codeIframe.style.display = 'none';
         codePlaceholder.style.display = 'flex';
       }
@@ -1661,16 +1663,8 @@
       const codeIframe = document.getElementById('code-iframe');
       const codePlaceholder = document.getElementById('code-placeholder');
 
-      // Determine code-server port
-      // Determine code-server port based on current port
-      let codePort = '8083';
-      if (location.hostname === 'localhost') {
-        codePort = '8083';
-      } else {
-        // Map 3131 -> 8083 for remote access
-        codePort = location.port === '3131' ? '8083' : '8083';
-      }
-      const codeUrl = `${location.protocol}//${location.hostname}:${codePort}/?folder=${encodeURIComponent(projectPath)}`;
+      // code-server mapped via Docker: external 8083 -> internal 8080
+      const codeUrl = `${location.protocol}//${location.hostname}:8083/?folder=${encodeURIComponent(projectPath)}`;
 
       codeIframe.src = codeUrl;
       codeIframe.style.display = 'block';
@@ -2199,6 +2193,13 @@
       pc.style.flex = '';
       updateResizerClass();
       dashboardVisible = (view === 'dashboard');
+
+      // Lazy-load code editor when switching to code view
+      if (view === 'code' && currentProjectPath && !codeEditorLoaded) {
+        loadCodeEditor(currentProjectPath);
+        codeEditorLoaded = true;
+      }
+
       setTimeout(() => { if (fitAddon) fitAddon.fit(); }, 50);
     }
 
