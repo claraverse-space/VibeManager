@@ -135,7 +135,8 @@ class SessionManager {
 
     // Launch AI tool with full path
     if ((shell === 'opencode' || shell === 'claude') && toolPath) {
-      const flag = autonomous ? ' --dangerously-skip-permissions' : '';
+      // Only Claude supports --dangerously-skip-permissions flag
+      const flag = (autonomous && shell === 'claude') ? ' --dangerously-skip-permissions' : '';
       execSync(`${TMUX_BIN} send-keys -t "${tmuxName}" "${toolPath}${flag}" Enter`);
       // Send Enter after delay to skip first-time setup prompts
       setTimeout(() => {
