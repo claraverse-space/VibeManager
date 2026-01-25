@@ -1904,8 +1904,9 @@
     }
 
     function shortenPath(p) {
-      const home = '/home/claraverse';
-      if (p.startsWith(home)) return '~' + p.slice(home.length);
+      // Replace /home/username or /Users/username with ~
+      const homeMatch = p.match(/^\/(?:home|Users)\/[^/]+/);
+      if (homeMatch) return '~' + p.slice(homeMatch[0].length);
       return p;
     }
 
