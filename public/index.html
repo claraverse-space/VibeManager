@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>VibeManager</title>
+  <link rel="icon" type="image/x-icon" href="https://claraverse.app/favicon.ico">
   <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
   <style>
@@ -1596,6 +1597,7 @@
         } else if (msg.type === 'attached') {
           document.getElementById('status-shell').textContent = msg.shell;
           document.getElementById('session-name').textContent = `${msg.session} - ${msg.projectPath}`;
+          document.title = `VibeManager | ${msg.session}`;
           currentProjectPath = msg.projectPath;
           setTimeout(() => {
             suppressOutput = false;
@@ -1719,6 +1721,7 @@
           currentSession = null;
           currentProjectPath = null;
           document.getElementById('session-name').textContent = 'No session';
+          document.title = 'VibeManager';
           setConnected(false);
           term.clear();
           term.writeln('\x1b[90mSession deleted.\x1b[0m');
@@ -2011,6 +2014,7 @@
           currentSession = null;
           currentProjectPath = null;
           document.getElementById('session-name').textContent = 'No session';
+          document.title = 'VibeManager';
           setConnected(false);
         }
       } catch (err) {
@@ -2040,6 +2044,7 @@
           currentSession = null;
           currentProjectPath = null;
           document.getElementById('session-name').textContent = 'No session';
+          document.title = 'VibeManager';
           setConnected(false);
         }
       } catch (err) {
