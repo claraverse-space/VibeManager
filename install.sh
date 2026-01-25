@@ -526,6 +526,11 @@ update() {
     if git rev-parse --git-dir > /dev/null 2>&1; then
         log_info "Pulling latest changes..."
         git fetch origin 2>/dev/null
+        
+        # Reset any local changes to allow clean pull
+        git reset --hard HEAD 2>/dev/null
+        git clean -fd 2>/dev/null
+        
         LOCAL=$(git rev-parse HEAD)
         REMOTE=$(git rev-parse origin/master 2>/dev/null || git rev-parse origin/main 2>/dev/null)
 
@@ -554,8 +559,8 @@ update() {
         log_info "Updating dependencies..."
         npm install
 
-        # Check and install code-server if missing
-        if ! check_command code-server; then
+        # Check and install code-server if missing (check user paths too)
+        if ! check_command code-server && [ ! -x "$HOME/.local/bin/code-server" ]; then
             log_info "Installing code-server..."
             if curl -fsSL https://code-server.dev/install.sh | sh 2>/dev/null; then
                 log_success "code-server installed (system)"
@@ -563,6 +568,8 @@ update() {
                 log_info "System install failed, installing to user space..."
                 install_code_server_user
             fi
+        else
+            log_success "code-server already installed"
         fi
 
         # Recreate service file to ensure proper PATH/env vars
