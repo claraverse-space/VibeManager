@@ -172,11 +172,20 @@ setup_local() {
     fi
 
     # Install Claude Code CLI
-    log_info "Installing Claude Code CLI..."
-    npm install -g @anthropic-ai/claude-code 2>/dev/null || log_warn "Claude Code CLI install failed (optional)"
+    log_info "Installing Claude Code..."
+    if ! check_command claude; then
+        curl -fsSL https://claude.ai/install.sh | bash || log_warn "Claude Code install failed (optional)"
+    else
+        log_success "Claude Code already installed"
+    fi
 
-    # Install OpenCode if available
-    npm install -g opencode 2>/dev/null || log_warn "OpenCode not available (optional)"
+    # Install OpenCode
+    log_info "Installing OpenCode..."
+    if ! check_command opencode; then
+        curl -fsSL https://opencode.ai/install | bash || log_warn "OpenCode install failed (optional)"
+    else
+        log_success "OpenCode already installed"
+    fi
 
     log_success "Local installation complete"
 }

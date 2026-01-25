@@ -31,19 +31,19 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Install code-server (browser-based VS Code)
 RUN curl -fsSL https://code-server.dev/install.sh | sh
 
-# Install Claude Code CLI globally via npm
-RUN npm install -g @anthropic-ai/claude-code || echo "Claude Code install failed, continuing..."
-
-# Install OpenCode (if available via npm or other method)
-RUN npm install -g opencode || echo "OpenCode not available via npm"
-
 # Create non-root user
 RUN useradd -m -s /bin/bash -u 1000 vibe && \
     echo "vibe ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # Create directories with proper ownership
-RUN mkdir -p /app /workspace /home/vibe/.local/share/projectgenerator && \
+RUN mkdir -p /app /workspace /home/vibe/.local/share/projectgenerator /home/vibe/.local/bin && \
     chown -R vibe:vibe /app /workspace /home/vibe
+
+# Install Claude Code and OpenCode as vibe user (installs to ~/.local/bin)
+USER vibe
+RUN curl -fsSL https://claude.ai/install.sh | bash || echo "Claude Code install failed, continuing..."
+RUN curl -fsSL https://opencode.ai/install | bash || echo "OpenCode install failed, continuing..."
+USER root
 
 # Create app directory
 WORKDIR /app
@@ -68,12 +68,12 @@ EXPOSE 3000 8080
 RUN echo '#!/bin/bash\n\
 set -e\n\
 \n\
-# Ensure workspace permissions\n\
-chown -R vibe:vibe /workspace 2>/dev/null || true\n\
+# Get the real user home directory from environment\n\
+USER_HOME="${HOME:-/home/vibe}"\n\
 \n\
 # Start VibeManager as vibe user (unset PORT after starting)\n\
 cd /app\n\
-gosu vibe env PORT=3000 npm start &\n\
+gosu vibe env PORT=3000 HOME="$USER_HOME" npm start &\n\
 VIBE_PID=$!\n\
 \n\
 # Wait for VibeManager to start\n\
@@ -82,8 +82,8 @@ sleep 3\n\
 # Unset PORT to prevent code-server from using it\n\
 unset PORT\n\
 \n\
-# Start code-server as vibe user with explicit port\n\
-exec gosu vibe env -u PORT code-server --bind-addr 0.0.0.0:8080 --auth none --disable-telemetry /workspace\n\
+# Start code-server as vibe user with explicit port, serving user home\n\
+exec gosu vibe env -u PORT HOME="$USER_HOME" code-server --bind-addr 0.0.0.0:8080 --auth none --disable-telemetry "$USER_HOME"\n\
 ' > /start.sh && chmod +x /start.sh
 
 CMD ["/start.sh"]

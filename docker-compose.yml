@@ -6,14 +6,13 @@ services:
       - "3131:3000"   # VibeManager web interface
       - "8083:8080"   # VS Code (code-server)
     volumes:
-      - workspace:/workspace
-      - /var/run/docker.sock:/var/run/docker.sock  # Optional: for Docker-in-Docker
+      - ${HOME}:${HOME}                             # Mount user's home directory
+      - /var/run/docker.sock:/var/run/docker.sock   # Optional: for Docker-in-Docker
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - HOME=${HOME}
     restart: unless-stopped
     stdin_open: true
     tty: true
-
-volumes:
-  workspace:
+    working_dir: ${HOME}
