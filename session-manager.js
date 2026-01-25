@@ -14,6 +14,8 @@ const TOOL_SEARCH_PATHS = [
   '/opt/homebrew/bin',
   path.join(process.env.HOME, '.local/bin'),
   path.join(process.env.HOME, '.npm-global/bin'),
+  path.join(process.env.HOME, '.opencode/bin'),  // OpenCode default install location
+  path.join(process.env.HOME, '.claude/bin'),    // Claude alternate location
   '/snap/bin'
 ];
 

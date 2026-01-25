@@ -131,6 +131,63 @@ install_dependencies() {
     log_success "Dependencies installed"
 }
 
+install_code_server_user() {
+    # Install code-server to user space without sudo
+    local CODE_SERVER_VERSION="4.108.1"
+    local ARCH=$(uname -m)
+    local DOWNLOAD_ARCH=""
+    
+    case $ARCH in
+        x86_64) DOWNLOAD_ARCH="amd64" ;;
+        aarch64|arm64) DOWNLOAD_ARCH="arm64" ;;
+        *) log_error "Unsupported architecture: $ARCH"; return 1 ;;
+    esac
+    
+    local CACHE_DIR="$HOME/.cache/code-server"
+    local INSTALL_PATH="$HOME/.local/lib/code-server"
+    local BIN_PATH="$HOME/.local/bin"
+    
+    mkdir -p "$CACHE_DIR" "$INSTALL_PATH" "$BIN_PATH"
+    
+    OS=$(detect_os)
+    if [ "$OS" = "macos" ]; then
+        local PKG_NAME="code-server-${CODE_SERVER_VERSION}-macos-${DOWNLOAD_ARCH}.tar.gz"
+        local PKG_URL="https://github.com/coder/code-server/releases/download/v${CODE_SERVER_VERSION}/${PKG_NAME}"
+        
+        log_info "Downloading code-server for macOS..."
+        curl -fsSL -o "$CACHE_DIR/$PKG_NAME" "$PKG_URL" || { log_error "Download failed"; return 1; }
+        
+        tar -xzf "$CACHE_DIR/$PKG_NAME" -C "$INSTALL_PATH" --strip-components=1
+    else
+        local PKG_NAME="code-server_${CODE_SERVER_VERSION}_${DOWNLOAD_ARCH}.deb"
+        local PKG_URL="https://github.com/coder/code-server/releases/download/v${CODE_SERVER_VERSION}/${PKG_NAME}"
+        
+        log_info "Downloading code-server..."
+        curl -fsSL -o "$CACHE_DIR/$PKG_NAME" "$PKG_URL" || { log_error "Download failed"; return 1; }
+        
+        # Extract deb without sudo
+        log_info "Extracting code-server to user space..."
+        local TEMP_EXTRACT="$CACHE_DIR/extract"
+        mkdir -p "$TEMP_EXTRACT"
+        dpkg-deb -x "$CACHE_DIR/$PKG_NAME" "$TEMP_EXTRACT"
+        
+        # Move to final location
+        rm -rf "$INSTALL_PATH"
+        mv "$TEMP_EXTRACT/usr/lib/code-server" "$INSTALL_PATH"
+        rm -rf "$TEMP_EXTRACT"
+    fi
+    
+    # Create symlink in user bin
+    ln -sf "$INSTALL_PATH/bin/code-server" "$BIN_PATH/code-server"
+    
+    if [ -x "$BIN_PATH/code-server" ]; then
+        log_success "code-server installed to $BIN_PATH/code-server"
+    else
+        log_error "code-server installation failed"
+        return 1
+    fi
+}
+
 clone_or_update_repo() {
     if [ -d "$INSTALL_DIR" ]; then
         log_info "Updating VibeManager..."
@@ -165,8 +222,13 @@ setup_local() {
     # Install code-server for VS Code in browser
     log_info "Installing code-server..."
     if ! check_command code-server; then
-        curl -fsSL https://code-server.dev/install.sh | sh
-        log_success "code-server installed"
+        # Try system install first, fall back to user-space install
+        if curl -fsSL https://code-server.dev/install.sh | sh 2>/dev/null; then
+            log_success "code-server installed (system)"
+        else
+            log_info "System install failed, installing to user space..."
+            install_code_server_user
+        fi
     else
         log_success "code-server already installed"
     fi
@@ -208,6 +270,9 @@ setup_docker() {
 create_systemd_service() {
     log_info "Creating systemd service..."
 
+    # Build PATH that includes user-local tool directories
+    local USER_PATH="$HOME/.local/bin:$HOME/.opencode/bin:$HOME/.nvm/versions/node/$(node -v 2>/dev/null | tr -d 'v' || echo '20.0.0')/bin:/usr/local/bin:/usr/bin:/bin"
+
     sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
 [Unit]
 Description=VibeManager - AI Coding Session Manager
@@ -223,6 +288,8 @@ RestartSec=10
 Environment=PORT=$PORT
 Environment=CODE_PORT=$CODE_PORT
 Environment=NODE_ENV=production
+Environment=HOME=$HOME
+Environment=PATH=$USER_PATH
 
 [Install]
 WantedBy=multi-user.target
@@ -269,6 +336,9 @@ create_launchd_service() {
     PLIST_PATH="$HOME/Library/LaunchAgents/com.vibemanager.plist"
     mkdir -p "$HOME/Library/LaunchAgents"
 
+    # Build PATH that includes user-local tool directories
+    local USER_PATH="$HOME/.local/bin:$HOME/.opencode/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+
     cat > "$PLIST_PATH" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -291,6 +361,10 @@ create_launchd_service() {
         <string>$CODE_PORT</string>
         <key>NODE_ENV</key>
         <string>production</string>
+        <key>HOME</key>
+        <string>$HOME</string>
+        <key>PATH</key>
+        <string>$USER_PATH</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>

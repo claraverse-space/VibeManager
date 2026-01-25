@@ -19,6 +19,29 @@ const TMUX_BIN = '/usr/bin/tmux';
 // Start code-server for local installations (not in Docker)
 let codeServerProcess = null;
 
+// Common paths where code-server might be installed
+const CODE_SERVER_SEARCH_PATHS = [
+  '/usr/bin/code-server',
+  '/usr/local/bin/code-server',
+  path.join(process.env.HOME || '', '.local/bin/code-server'),
+  path.join(process.env.HOME || '', '.local/lib/code-server/bin/code-server'),
+  '/opt/homebrew/bin/code-server'
+];
+
+function findCodeServer() {
+  // First try which
+  try {
+    const result = execSync('which code-server 2>/dev/null', { encoding: 'utf-8' }).trim();
+    if (result && fs.existsSync(result)) return result;
+  } catch {}
+
+  // Search common paths
+  for (const p of CODE_SERVER_SEARCH_PATHS) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
 function startCodeServer() {
   // Skip if running in Docker (code-server started separately)
   if (process.env.DOCKER === '1' || fs.existsSync('/.dockerenv')) {
@@ -27,11 +50,10 @@ function startCodeServer() {
   }
 
   // Check if code-server is installed
-  let codeServerPath = null;
-  try {
-    codeServerPath = execSync('which code-server 2>/dev/null', { encoding: 'utf-8' }).trim();
-  } catch {
+  const codeServerPath = findCodeServer();
+  if (!codeServerPath) {
     console.log('code-server not installed, VS Code tab will be unavailable');
+    console.log('Install with: curl -fsSL https://code-server.dev/install.sh | sh');
     return;
   }
 
