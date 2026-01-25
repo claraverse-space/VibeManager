@@ -1391,6 +1391,7 @@
   <div class="status-bar">
     <span id="status-shell">--</span>
     <span><span class="status-dot" id="status-dot"></span><span id="status-connection">Disconnected</span></span>
+    <span id="notify-toggle" title="Toggle notification sound" style="cursor:pointer;margin-left:8px;">🔔</span>
   </div>
 
   <!-- Sessions modal -->
@@ -1496,6 +1497,52 @@
     let fbCurrentPath = '/home';
     let dashboardVisible = false;
 
+    // Notification sound
+    let audioCtx = null;
+    let notifySoundEnabled = localStorage.getItem('notifySound') !== 'false';
+    let inputWaitingTimeout = null;
+    let lastNotifyTime = 0;
+
+    function playBeep() {
+      if (!notifySoundEnabled) return;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.value = 800;
+        gain.gain.value = 0.3;
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.15);
+      } catch (e) {}
+    }
+
+    function checkForInputWaiting() {
+      if (!term || !term.buffer) return;
+      const buffer = term.buffer.active;
+      const lastLine = buffer.getLine(buffer.cursorY)?.translateToString().trim() || '';
+
+      const waitingPatterns = [
+        /\[Y\/n\]/i,
+        /\(y\/N\)/i,
+        /\?\s*$/,
+        /^\s*[$#%>]\s*$/,
+        /allow|deny|approve/i,
+      ];
+
+      if (waitingPatterns.some(p => p.test(lastLine))) {
+        if (Date.now() - lastNotifyTime > 3000) {
+          lastNotifyTime = Date.now();
+          playBeep();
+        }
+      }
+    }
+
+    function updateNotifyIcon() {
+      document.getElementById('notify-toggle').textContent = notifySoundEnabled ? '🔔' : '🔕';
+    }
+
     const isMobile = window.innerWidth <= 600;
 
     // --- Terminal ---
@@ -1594,6 +1641,9 @@
         const msg = JSON.parse(event.data);
         if (msg.type === 'data') {
           if (!suppressOutput) term.write(msg.data);
+          // Check for input waiting after output settles
+          clearTimeout(inputWaitingTimeout);
+          inputWaitingTimeout = setTimeout(checkForInputWaiting, 600);
         } else if (msg.type === 'attached') {
           document.getElementById('status-shell').textContent = msg.shell;
           document.getElementById('session-name').textContent = `${msg.session} - ${msg.projectPath}`;
@@ -2449,6 +2499,13 @@
       const current = document.documentElement.getAttribute('data-theme') || 'dark';
       applyTheme(current === 'dark' ? 'light' : 'dark');
     });
+
+    document.getElementById('notify-toggle').addEventListener('click', () => {
+      notifySoundEnabled = !notifySoundEnabled;
+      localStorage.setItem('notifySound', notifySoundEnabled);
+      updateNotifyIcon();
+    });
+    updateNotifyIcon();
 
     // Load saved theme
     const savedTheme = localStorage.getItem('pg_theme') || 'dark';
