@@ -18,7 +18,7 @@ Perfect for kicking off multiple AI coding sessions on your Raspberry Pi or serv
 **One-line install** (Linux, macOS, WSL):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/claraverse/vibemanager/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash
 ```
 
 The installer will ask you to choose:
@@ -31,13 +31,13 @@ Both options auto-start on boot.
 
 ```bash
 # Install with Docker (recommended)
-curl -fsSL https://raw.githubusercontent.com/claraverse/vibemanager/main/install.sh | bash -s -- --docker
+curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash -s -- --docker
 
 # Install locally without Docker
-curl -fsSL https://raw.githubusercontent.com/claraverse/vibemanager/main/install.sh | bash -s -- --local
+curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash -s -- --local
 
 # Uninstall
-curl -fsSL https://raw.githubusercontent.com/claraverse/vibemanager/main/install.sh | bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash -s -- --uninstall
 ```
 
 ## Features
@@ -65,7 +65,7 @@ curl -fsSL https://raw.githubusercontent.com/claraverse/vibemanager/main/install
 ### Option 1: Docker
 
 ```bash
-git clone https://github.com/claraverse/vibemanager.git
+git clone https://github.com/claraverse-space/VibeManager.git
 cd vibemanager
 docker compose up -d
 ```
@@ -77,7 +77,7 @@ docker compose up -d
 ### Option 2: Local
 
 ```bash
-git clone https://github.com/claraverse/vibemanager.git
+git clone https://github.com/claraverse-space/VibeManager.git
 cd vibemanager
 npm install
 npm start
@@ -185,7 +185,7 @@ Real-time updates at `ws://localhost:3131/status`
 ## Uninstall
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/claraverse/vibemanager/main/install.sh | bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash -s -- --uninstall
 ```
 
 ## License

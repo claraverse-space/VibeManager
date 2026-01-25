@@ -15,7 +15,7 @@ INSTALL_DIR="${VIBEMANAGER_DIR:-$HOME/.vibemanager}"
 SERVICE_NAME="vibemanager"
 PORT="${VIBEMANAGER_PORT:-3131}"
 CODE_PORT="${VIBEMANAGER_CODE_PORT:-8083}"
-REPO_URL="https://github.com/claraverse/vibemanager"
+REPO_URL="https://github.com/claraverse-space/VibeManager"
 
 print_banner() {
     echo -e "${CYAN}"
