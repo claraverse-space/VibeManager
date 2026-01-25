@@ -1662,7 +1662,14 @@
       const codePlaceholder = document.getElementById('code-placeholder');
 
       // Determine code-server port
-      const codePort = location.hostname === 'localhost' ? '8082' : location.port.replace('3004', '8082');
+      // Determine code-server port based on current port
+      let codePort = '8083';
+      if (location.hostname === 'localhost') {
+        codePort = '8083';
+      } else {
+        // Map 3131 -> 8083 for remote access
+        codePort = location.port === '3131' ? '8083' : '8083';
+      }
       const codeUrl = `${location.protocol}//${location.hostname}:${codePort}/?folder=${encodeURIComponent(projectPath)}`;
 
       codeIframe.src = codeUrl;

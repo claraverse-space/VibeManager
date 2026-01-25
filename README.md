@@ -21,10 +21,8 @@ docker-compose up -d
 
 ### Access:
 
-- **VibeManager**: http://localhost:3004
-- **VS Code**: http://localhost:8082
-
-(Ports 3004 and 8082 are used to avoid conflicts. Edit `docker-compose.yml` to change these.)
+- **VibeManager**: http://localhost:3131
+- **VS Code**: http://localhost:8083
 
 ### Stop:
 
