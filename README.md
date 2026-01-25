@@ -21,6 +21,12 @@ curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master
 
 The installer will prompt you to choose Docker or Local installation.
 
+## Update
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash -s -- --update
+```
+
 ## Uninstall
 
 ```bash
