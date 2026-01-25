@@ -92,30 +92,6 @@
       font-family: monospace;
     }
 
-    .btn-vscode {
-      background: #007acc;
-      color: #fff;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 3px;
-      font-size: 11px;
-      cursor: pointer;
-      font-family: 'Satoshi', sans-serif;
-      display: none;
-      align-items: center;
-      gap: 5px;
-      transition: background 0.2s;
-      white-space: nowrap;
-    }
-
-    .btn-vscode:hover {
-      background: #005a9e;
-    }
-
-    .btn-vscode.visible {
-      display: flex;
-    }
-
     .ports-section {
       display: flex;
       align-items: center;
@@ -259,6 +235,40 @@
     }
 
     .preview-container iframe { width: 100%; flex: 1; border: none; min-height: 0; }
+
+    /* Code Editor */
+    .code-container {
+      flex: 1;
+      position: relative;
+      background: var(--bg);
+      min-height: 0;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .code-container iframe { width: 100%; flex: 1; border: none; min-height: 0; }
+
+    .code-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 8px;
+      height: 100%;
+      color: var(--text-dim);
+      font-size: 13px;
+    }
+
+    .code-placeholder .icon {
+      font-size: 40px;
+      opacity: 0.3;
+    }
+
+    .code-placeholder .sub {
+      font-size: 11px;
+      opacity: 0.6;
+    }
 
     .preview-placeholder {
       display: flex;
@@ -494,16 +504,27 @@
 
     /* View modes */
     .main-content[data-view="preview"] .terminal-container,
+    .main-content[data-view="preview"] .code-container,
     .main-content[data-view="preview"] .resizer { display: none; }
     .main-content[data-view="preview"] .preview-container { flex: 1; width: 100%; height: 100%; }
 
+    .main-content[data-view="code"] .terminal-container,
+    .main-content[data-view="code"] .preview-container,
+    .main-content[data-view="code"] .resizer { display: none; }
+    .main-content[data-view="code"] .code-container { flex: 1; width: 100%; height: 100%; }
+
     .main-content[data-view="terminal"] .preview-container,
+    .main-content[data-view="terminal"] .code-container,
     .main-content[data-view="terminal"] .resizer { display: none; }
     .main-content[data-view="terminal"] .terminal-container { width: 100%; height: 100%; flex: 1; }
 
     /* Split: desktop = side by side, mobile = stacked */
     .main-content[data-view="split"] {
       flex-direction: row;
+    }
+
+    .main-content[data-view="split"] .code-container {
+      display: none;
     }
 
     .main-content[data-view="split"] .terminal-container {
@@ -548,11 +569,13 @@
     /* Dashboard view mode */
     .main-content[data-view="dashboard"] .terminal-container,
     .main-content[data-view="dashboard"] .preview-container,
+    .main-content[data-view="dashboard"] .code-container,
     .main-content[data-view="dashboard"] .resizer { display: none; }
     .main-content[data-view="dashboard"] .dashboard-container { display: flex; }
 
     .main-content[data-view="terminal"] .dashboard-container,
     .main-content[data-view="preview"] .dashboard-container,
+    .main-content[data-view="code"] .dashboard-container,
     .main-content[data-view="split"] .dashboard-container { display: none; }
 
     /* Dashboard */
@@ -1246,7 +1269,6 @@
       .ports-section { display: none; }
       .view-tab { padding: 6px 8px; font-size: 10px; }
       .session-item .del-btn { opacity: 1; }
-      .btn-vscode { font-size: 10px; padding: 5px 8px; }
 
       .confirm-content {
         padding: 16px;
@@ -1278,12 +1300,6 @@
     <button id="btn-sessions">Sessions</button>
     <div class="session-switcher" id="session-switcher"></div>
     <div class="session-name" id="session-name">No session</div>
-    <button class="btn-vscode" id="btn-vscode" title="Open in VS Code">
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M11.5 0L6.5 5.5L2.5 2L0 3.5L6.5 10L16 1.5L11.5 0Z"/>
-      </svg>
-      Open in VS Code
-    </button>
     <div class="ports-section">
       <div id="ports-container"><span style="font-size:11px;color:var(--text-dim)">--</span></div>
     </div>
@@ -1294,6 +1310,7 @@
   <div class="view-tabs">
     <button class="view-tab active" data-view="dashboard">Dashboard</button>
     <button class="view-tab" data-view="terminal">Terminal</button>
+    <button class="view-tab" data-view="code">Code</button>
     <button class="view-tab" data-view="preview">Preview</button>
     <button class="view-tab" data-view="split">Split</button>
   </div>
@@ -1358,6 +1375,15 @@
         <div class="sub">Start a dev server and select a port</div>
       </div>
       <iframe id="preview-iframe" style="display:none" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+    </div>
+
+    <div class="code-container" id="code-container">
+      <div class="code-placeholder" id="code-placeholder">
+        <div class="icon">&#x1F4BB;</div>
+        <div>No project loaded</div>
+        <div class="sub">Connect to a session to edit code</div>
+      </div>
+      <iframe id="code-iframe" style="display:none" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals"></iframe>
     </div>
   </div>
 
@@ -1619,12 +1645,29 @@
     function setConnected(connected) {
       document.getElementById('status-connection').textContent = connected ? 'Connected' : 'Disconnected';
       document.getElementById('status-dot').classList.toggle('connected', connected);
-      const vscodeBtn = document.getElementById('btn-vscode');
+
+      // Update code iframe when connected/disconnected
       if (connected && currentProjectPath) {
-        vscodeBtn.classList.add('visible');
+        loadCodeEditor(currentProjectPath);
       } else {
-        vscodeBtn.classList.remove('visible');
+        const codeIframe = document.getElementById('code-iframe');
+        const codePlaceholder = document.getElementById('code-placeholder');
+        codeIframe.style.display = 'none';
+        codePlaceholder.style.display = 'flex';
       }
+    }
+
+    function loadCodeEditor(projectPath) {
+      const codeIframe = document.getElementById('code-iframe');
+      const codePlaceholder = document.getElementById('code-placeholder');
+
+      // Determine code-server port
+      const codePort = location.hostname === 'localhost' ? '8082' : location.port.replace('3004', '8082');
+      const codeUrl = `${location.protocol}//${location.hostname}:${codePort}/?folder=${encodeURIComponent(projectPath)}`;
+
+      codeIframe.src = codeUrl;
+      codeIframe.style.display = 'block';
+      codePlaceholder.style.display = 'none';
     }
 
     // --- Sessions UI ---
@@ -2291,15 +2334,6 @@
     // --- Event Listeners ---
     document.getElementById('btn-sessions').addEventListener('click', () => {
       setView('dashboard');
-    });
-
-    document.getElementById('btn-vscode').addEventListener('click', () => {
-      if (currentProjectPath) {
-        // Open VS Code with the project folder
-        const vscodePort = location.hostname === 'localhost' ? '8082' : location.port.replace('3004', '8082');
-        const vscodeUrl = `${location.protocol}//${location.hostname}:${vscodePort}/?folder=${encodeURIComponent(currentProjectPath)}`;
-        window.open(vscodeUrl, '_blank');
-      }
     });
 
     document.getElementById('sessions-close').addEventListener('click', () => {
