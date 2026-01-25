@@ -572,16 +572,40 @@ update() {
             log_success "code-server already installed"
         fi
 
-        # Recreate service file to ensure proper PATH/env vars
+        # Recreate service file to ensure proper PATH/env vars (only if needed)
         OS=$(detect_os)
         case $OS in
             linux|wsl)
-                log_info "Updating systemd service..."
-                create_systemd_service
+                # Check if service exists and has proper PATH
+                if [ -f /etc/systemd/system/${SERVICE_NAME}.service ]; then
+                    if grep -q "\.opencode/bin" /etc/systemd/system/${SERVICE_NAME}.service 2>/dev/null; then
+                        log_info "Restarting systemd service..."
+                        sudo systemctl restart ${SERVICE_NAME} 2>/dev/null || log_warn "Could not restart service (run: sudo systemctl restart vibemanager)"
+                        log_success "Service restarted"
+                    else
+                        log_info "Updating systemd service with proper PATH..."
+                        create_systemd_service
+                    fi
+                else
+                    log_info "Creating systemd service..."
+                    create_systemd_service
+                fi
                 ;;
             macos)
-                log_info "Updating launchd service..."
-                create_launchd_service
+                if [ -f "$HOME/Library/LaunchAgents/com.vibemanager.plist" ]; then
+                    if grep -q "\.opencode/bin" "$HOME/Library/LaunchAgents/com.vibemanager.plist" 2>/dev/null; then
+                        log_info "Restarting launchd service..."
+                        launchctl stop com.vibemanager 2>/dev/null || true
+                        launchctl start com.vibemanager
+                        log_success "Service restarted"
+                    else
+                        log_info "Updating launchd service with proper PATH..."
+                        create_launchd_service
+                    fi
+                else
+                    log_info "Creating launchd service..."
+                    create_launchd_service
+                fi
                 ;;
         esac
     fi
