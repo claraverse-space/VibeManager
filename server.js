@@ -5,6 +5,7 @@ const pty = require('node-pty');
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
+const { spawn, execSync } = require('child_process');
 const SessionManager = require('./session-manager');
 
 const app = express();
@@ -12,7 +13,56 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 const PORT = process.env.PORT || 3131;
+const CODE_PORT = process.env.CODE_PORT || 8083;
 const TMUX_BIN = '/usr/bin/tmux';
+
+// Start code-server for local installations (not in Docker)
+let codeServerProcess = null;
+
+function startCodeServer() {
+  // Skip if running in Docker (code-server started separately)
+  if (process.env.DOCKER === '1' || fs.existsSync('/.dockerenv')) {
+    console.log('Running in Docker, code-server managed externally');
+    return;
+  }
+
+  // Check if code-server is installed
+  let codeServerPath = null;
+  try {
+    codeServerPath = execSync('which code-server 2>/dev/null', { encoding: 'utf-8' }).trim();
+  } catch {
+    console.log('code-server not installed, VS Code tab will be unavailable');
+    return;
+  }
+
+  // Check if already running on CODE_PORT
+  try {
+    execSync(`ss -tlnH | grep ":${CODE_PORT}"`, { encoding: 'utf-8' });
+    console.log(`code-server already running on port ${CODE_PORT}`);
+    return;
+  } catch {
+    // Not running, start it
+  }
+
+  const workspaceDir = process.env.HOME || '/home';
+  console.log(`Starting code-server on port ${CODE_PORT}...`);
+
+  codeServerProcess = spawn(codeServerPath, [
+    '--bind-addr', `0.0.0.0:${CODE_PORT}`,
+    '--auth', 'none',
+    '--disable-telemetry',
+    workspaceDir
+  ], {
+    stdio: 'ignore',
+    detached: true
+  });
+
+  codeServerProcess.unref();
+  console.log(`code-server started on port ${CODE_PORT}`);
+}
+
+// Start code-server after a short delay to let main server start first
+setTimeout(startCodeServer, 1000);
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());

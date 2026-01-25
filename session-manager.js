@@ -7,6 +7,31 @@ const DATA_DIR = path.join(process.env.HOME, '.local/share/projectgenerator');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const SESSION_PREFIX = 'pg_';
 
+// Common paths where claude/opencode might be installed
+const TOOL_SEARCH_PATHS = [
+  '/usr/bin',
+  '/usr/local/bin',
+  '/opt/homebrew/bin',
+  path.join(process.env.HOME, '.local/bin'),
+  path.join(process.env.HOME, '.npm-global/bin'),
+  '/snap/bin'
+];
+
+function findTool(name) {
+  // First try which
+  try {
+    const result = execSync(`which ${name} 2>/dev/null`, { encoding: 'utf-8' }).trim();
+    if (result && fs.existsSync(result)) return result;
+  } catch {}
+
+  // Search common paths
+  for (const dir of TOOL_SEARCH_PATHS) {
+    const fullPath = path.join(dir, name);
+    if (fs.existsSync(fullPath)) return fullPath;
+  }
+  return null;
+}
+
 class SessionManager {
   constructor() {
     this.ensureDataDir();
@@ -76,17 +101,29 @@ class SessionManager {
       throw new Error(`tmux session "${tmuxName}" already exists`);
     }
 
-    // Determine shell
+    // Determine shell and find tool path
     let shell = shellChoice;
+    let toolPath = null;
+
     if (shell === 'auto') {
-      shell = 'bash';
-      try { execSync('which opencode', { stdio: 'ignore' }); shell = 'opencode'; } catch {}
-    }
-    // Verify chosen tool exists
-    if (shell === 'opencode') {
-      try { execSync('which opencode', { stdio: 'ignore' }); } catch { shell = 'bash'; }
+      // Try opencode first, then claude, then bash
+      toolPath = findTool('opencode');
+      if (toolPath) {
+        shell = 'opencode';
+      } else {
+        toolPath = findTool('claude');
+        if (toolPath) {
+          shell = 'claude';
+        } else {
+          shell = 'bash';
+        }
+      }
+    } else if (shell === 'opencode') {
+      toolPath = findTool('opencode');
+      if (!toolPath) shell = 'bash';
     } else if (shell === 'claude') {
-      try { execSync('which claude', { stdio: 'ignore' }); } catch { shell = 'bash'; }
+      toolPath = findTool('claude');
+      if (!toolPath) shell = 'bash';
     }
 
     // Create detached tmux session
@@ -94,10 +131,16 @@ class SessionManager {
       `${TMUX_BIN} new-session -d -s "${tmuxName}" -c "${projectPath}" -x ${cols} -y ${rows}`
     );
 
-    // Launch AI tool
-    if (shell === 'opencode' || shell === 'claude') {
+    // Launch AI tool with full path
+    if ((shell === 'opencode' || shell === 'claude') && toolPath) {
       const flag = autonomous ? ' --dangerously-skip-permissions' : '';
-      execSync(`${TMUX_BIN} send-keys -t "${tmuxName}" "${shell}${flag}" Enter`);
+      execSync(`${TMUX_BIN} send-keys -t "${tmuxName}" "${toolPath}${flag}" Enter`);
+      // Send Enter after delay to skip first-time setup prompts
+      setTimeout(() => {
+        try {
+          execSync(`${TMUX_BIN} send-keys -t "${tmuxName}" Enter`);
+        } catch {}
+      }, 2000);
       // Send initial prompt after tool starts up
       if (initialPrompt) {
         const safePrompt = initialPrompt.replace(/"/g, '\\"').replace(/\$/g, '\\$');
@@ -189,15 +232,24 @@ class SessionManager {
     );
 
     if (meta.shell === 'opencode' || meta.shell === 'claude') {
-      const flag = meta.autonomous !== false ? ' --dangerously-skip-permissions' : '';
-      execSync(`${TMUX_BIN} send-keys -t "${meta.tmuxSession}" "${meta.shell}${flag}" Enter`);
-      if (meta.initialPrompt) {
-        const safePrompt = meta.initialPrompt.replace(/"/g, '\\"').replace(/\$/g, '\\$');
+      const toolPath = findTool(meta.shell);
+      if (toolPath) {
+        const flag = meta.autonomous !== false ? ' --dangerously-skip-permissions' : '';
+        execSync(`${TMUX_BIN} send-keys -t "${meta.tmuxSession}" "${toolPath}${flag}" Enter`);
+        // Send Enter after delay to skip first-time setup prompts
         setTimeout(() => {
           try {
-            execSync(`${TMUX_BIN} send-keys -t "${meta.tmuxSession}" "${safePrompt}" Enter`);
+            execSync(`${TMUX_BIN} send-keys -t "${meta.tmuxSession}" Enter`);
           } catch {}
-        }, 3000);
+        }, 2000);
+        if (meta.initialPrompt) {
+          const safePrompt = meta.initialPrompt.replace(/"/g, '\\"').replace(/\$/g, '\\$');
+          setTimeout(() => {
+            try {
+              execSync(`${TMUX_BIN} send-keys -t "${meta.tmuxSession}" "${safePrompt}" Enter`);
+            } catch {}
+          }, 3000);
+        }
       }
     }
 

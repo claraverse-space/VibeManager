@@ -162,6 +162,15 @@ setup_local() {
     cd "$INSTALL_DIR"
     npm install
 
+    # Install code-server for VS Code in browser
+    log_info "Installing code-server..."
+    if ! check_command code-server; then
+        curl -fsSL https://code-server.dev/install.sh | sh
+        log_success "code-server installed"
+    else
+        log_success "code-server already installed"
+    fi
+
     # Install Claude Code CLI
     log_info "Installing Claude Code CLI..."
     npm install -g @anthropic-ai/claude-code 2>/dev/null || log_warn "Claude Code CLI install failed (optional)"
@@ -203,6 +212,7 @@ ExecStart=$(which node) server.js
 Restart=on-failure
 RestartSec=10
 Environment=PORT=$PORT
+Environment=CODE_PORT=$CODE_PORT
 Environment=NODE_ENV=production
 
 [Install]
@@ -268,6 +278,8 @@ create_launchd_service() {
     <dict>
         <key>PORT</key>
         <string>$PORT</string>
+        <key>CODE_PORT</key>
+        <string>$CODE_PORT</string>
         <key>NODE_ENV</key>
         <string>production</string>
     </dict>
@@ -350,9 +362,7 @@ print_success() {
     echo -e "${GREEN}${BOLD}Installation Complete!${NC}"
     echo ""
     echo -e "  ${CYAN}VibeManager${NC} is running at: ${BOLD}http://localhost:$PORT${NC}"
-    if [ "$1" == "docker" ]; then
-        echo -e "  ${CYAN}Code Server${NC} is running at: ${BOLD}http://localhost:$CODE_PORT${NC}"
-    fi
+    echo -e "  ${CYAN}Code Server${NC} is running at: ${BOLD}http://localhost:$CODE_PORT${NC}"
     echo ""
     echo -e "  ${BOLD}Commands:${NC}"
     OS=$(detect_os)
