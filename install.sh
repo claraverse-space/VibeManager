@@ -271,7 +271,7 @@ create_systemd_service() {
     log_info "Creating systemd service..."
 
     # Build PATH that includes user-local tool directories
-    local USER_PATH="$HOME/.local/bin:$HOME/.opencode/bin:$HOME/.nvm/versions/node/$(node -v 2>/dev/null | tr -d 'v' || echo '20.0.0')/bin:/usr/local/bin:/usr/bin:/bin"
+    local USER_PATH="$HOME/.local/bin:$HOME/.opencode/bin:$HOME/.nvm/versions/node/$(node -v 2>/dev/null || echo 'v20.0.0')/bin:/usr/local/bin:/usr/bin:/bin"
 
     sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
 [Unit]
@@ -572,40 +572,17 @@ update() {
             log_success "code-server already installed"
         fi
 
-        # Recreate service file to ensure proper PATH/env vars (only if needed)
+        # Always recreate service file to ensure latest PATH/env configuration
         OS=$(detect_os)
         case $OS in
             linux|wsl)
-                # Check if service exists and has proper PATH
-                if [ -f /etc/systemd/system/${SERVICE_NAME}.service ]; then
-                    if grep -q "\.opencode/bin" /etc/systemd/system/${SERVICE_NAME}.service 2>/dev/null; then
-                        log_info "Restarting systemd service..."
-                        sudo systemctl restart ${SERVICE_NAME} 2>/dev/null || log_warn "Could not restart service (run: sudo systemctl restart vibemanager)"
-                        log_success "Service restarted"
-                    else
-                        log_info "Updating systemd service with proper PATH..."
-                        create_systemd_service
-                    fi
-                else
-                    log_info "Creating systemd service..."
-                    create_systemd_service
-                fi
+                log_info "Updating systemd service..."
+                create_systemd_service
                 ;;
             macos)
-                if [ -f "$HOME/Library/LaunchAgents/com.vibemanager.plist" ]; then
-                    if grep -q "\.opencode/bin" "$HOME/Library/LaunchAgents/com.vibemanager.plist" 2>/dev/null; then
-                        log_info "Restarting launchd service..."
-                        launchctl stop com.vibemanager 2>/dev/null || true
-                        launchctl start com.vibemanager
-                        log_success "Service restarted"
-                    else
-                        log_info "Updating launchd service with proper PATH..."
-                        create_launchd_service
-                    fi
-                else
-                    log_info "Creating launchd service..."
-                    create_launchd_service
-                fi
+                log_info "Updating launchd service..."
+                launchctl unload "$HOME/Library/LaunchAgents/com.vibemanager.plist" 2>/dev/null || true
+                create_launchd_service
                 ;;
         esac
     fi
@@ -665,7 +642,7 @@ main() {
             echo "  1) ${CYAN}Docker${NC} (recommended) - Isolated container with all dependencies"
             echo "  2) ${CYAN}Local${NC}  - Direct installation on your system"
             echo ""
-            read -p "Enter choice [1/2]: " choice
+            read -p "Enter choice [1/2]: " choice < /dev/tty
 
             case $choice in
                 1|docker|Docker) MODE="docker" ;;
