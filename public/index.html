@@ -1142,6 +1142,78 @@
       pointer-events: none;
     }
 
+    /* Confirmation Modal */
+    .confirm-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 20px;
+    }
+
+    .confirm-modal.visible { display: flex; }
+
+    .confirm-content {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      max-width: 400px;
+      width: 100%;
+      padding: 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    .confirm-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+
+    .confirm-message {
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    .confirm-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .confirm-actions button {
+      padding: 8px 16px;
+      font-size: 13px;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: 'Satoshi', sans-serif;
+      min-width: 70px;
+    }
+
+    .confirm-btn-cancel {
+      background: var(--surface2);
+      color: var(--text);
+    }
+
+    .confirm-btn-cancel:hover {
+      background: var(--surface);
+    }
+
+    .confirm-btn-confirm {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .confirm-btn-confirm:hover {
+      background: #e53e3e;
+    }
+
     /* Mobile */
     @media (max-width: 600px) {
       .toolbar { padding: 6px 8px; gap: 6px; }
@@ -1150,6 +1222,24 @@
       .ports-section { display: none; }
       .view-tab { padding: 6px 8px; font-size: 10px; }
       .session-item .del-btn { opacity: 1; }
+
+      .confirm-content {
+        padding: 16px;
+      }
+
+      .confirm-title {
+        font-size: 14px;
+      }
+
+      .confirm-message {
+        font-size: 12px;
+      }
+
+      .confirm-actions button {
+        flex: 1;
+        padding: 10px;
+        font-size: 14px;
+      }
     }
   </style>
 </head>
@@ -1316,6 +1406,18 @@
       <div class="modal-footer">
         <button class="btn-cancel" id="new-session-cancel">Cancel</button>
         <button class="btn-primary" id="btn-create-session">Create & Open</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmation modal -->
+  <div class="confirm-modal" id="confirm-modal">
+    <div class="confirm-content">
+      <div class="confirm-title" id="confirm-title">Confirm Action</div>
+      <div class="confirm-message" id="confirm-message">Are you sure?</div>
+      <div class="confirm-actions">
+        <button class="confirm-btn-cancel" id="confirm-cancel">Cancel</button>
+        <button class="confirm-btn-confirm" id="confirm-ok">Confirm</button>
       </div>
     </div>
   </div>
@@ -1519,7 +1621,11 @@
     }
 
     async function deleteSession(name) {
-      if (!confirm(`Delete session "${name}"? This will kill the terminal.`)) return;
+      const confirmed = await showConfirm(
+        'Delete Session',
+        `Delete session "${name}"? This will kill the terminal.`
+      );
+      if (!confirmed) return;
       try {
         await fetch(`/api/sessions/${encodeURIComponent(name)}`, { method: 'DELETE' });
         if (name === currentSession) {
@@ -1764,13 +1870,51 @@
         `).join('');
     }
 
+    // Custom confirmation modal
+    function showConfirm(title, message) {
+      return new Promise((resolve) => {
+        const modal = document.getElementById('confirm-modal');
+        const titleEl = document.getElementById('confirm-title');
+        const messageEl = document.getElementById('confirm-message');
+        const cancelBtn = document.getElementById('confirm-cancel');
+        const okBtn = document.getElementById('confirm-ok');
+
+        titleEl.textContent = title;
+        messageEl.textContent = message;
+        modal.classList.add('visible');
+
+        const cleanup = () => {
+          modal.classList.remove('visible');
+          cancelBtn.removeEventListener('click', onCancel);
+          okBtn.removeEventListener('click', onOk);
+        };
+
+        const onCancel = () => {
+          cleanup();
+          resolve(false);
+        };
+
+        const onOk = () => {
+          cleanup();
+          resolve(true);
+        };
+
+        cancelBtn.addEventListener('click', onCancel);
+        okBtn.addEventListener('click', onOk);
+      });
+    }
+
     function attachFromDash(name) {
       connectSession(name);
       setView('terminal');
     }
 
     async function stopFromDash(name) {
-      if (!confirm(`Stop session "${name}"? The tmux process will be killed but you can revive it later.`)) return;
+      const confirmed = await showConfirm(
+        'Stop Session',
+        `Stop session "${name}"? The tmux process will be killed but you can revive it later.`
+      );
+      if (!confirmed) return;
       try {
         await fetch(`/api/sessions/${encodeURIComponent(name)}/stop`, { method: 'POST' });
         if (currentSession === name) {
@@ -1793,7 +1937,11 @@
     }
 
     async function deleteFromDash(name) {
-      if (!confirm(`Permanently delete session "${name}"? This cannot be undone.`)) return;
+      const confirmed = await showConfirm(
+        'Delete Session',
+        `Permanently delete session "${name}"? This cannot be undone.`
+      );
+      if (!confirmed) return;
       try {
         await fetch(`/api/sessions/${encodeURIComponent(name)}`, { method: 'DELETE' });
         if (currentSession === name) {
