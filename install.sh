@@ -413,6 +413,96 @@ uninstall() {
     log_success "VibeManager uninstalled"
 }
 
+update() {
+    if [ ! -d "$INSTALL_DIR" ]; then
+        log_error "VibeManager is not installed at $INSTALL_DIR"
+        log_info "Run the installer without --update to install"
+        exit 1
+    fi
+
+    cd "$INSTALL_DIR"
+
+    # Detect installation type
+    if [ -f "docker-compose.yml" ] || [ -f "compose.yaml" ]; then
+        # Check if Docker container exists
+        if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "vibemanager"; then
+            MODE="docker"
+        elif [ -f "package.json" ]; then
+            MODE="local"
+        else
+            MODE="docker"  # Default to docker if compose file exists
+        fi
+    else
+        MODE="local"
+    fi
+
+    log_info "Detected ${MODE} installation"
+    log_info "Updating VibeManager..."
+
+    # Pull latest changes
+    if git rev-parse --git-dir > /dev/null 2>&1; then
+        log_info "Pulling latest changes..."
+        git fetch origin
+        LOCAL=$(git rev-parse HEAD)
+        REMOTE=$(git rev-parse origin/master 2>/dev/null || git rev-parse origin/main 2>/dev/null)
+
+        if [ "$LOCAL" = "$REMOTE" ]; then
+            log_success "Already up to date!"
+            exit 0
+        fi
+
+        git pull origin master 2>/dev/null || git pull origin main 2>/dev/null
+        log_success "Code updated"
+    else
+        log_warn "Not a git repository, downloading fresh copy..."
+        cd ..
+        rm -rf "$INSTALL_DIR"
+        git clone "$REPO_URL" "$INSTALL_DIR"
+        cd "$INSTALL_DIR"
+    fi
+
+    if [ "$MODE" == "docker" ]; then
+        log_info "Rebuilding Docker container..."
+        docker compose down 2>/dev/null || true
+        docker compose build --no-cache
+        docker compose up -d
+        log_success "Docker container updated and restarted"
+    else
+        log_info "Updating dependencies..."
+        npm install
+
+        # Restart service
+        OS=$(detect_os)
+        case $OS in
+            linux|wsl)
+                if systemctl is-active --quiet vibemanager 2>/dev/null; then
+                    log_info "Restarting systemd service..."
+                    sudo systemctl restart vibemanager
+                    log_success "Service restarted"
+                else
+                    log_warn "Service not running. Start with: sudo systemctl start vibemanager"
+                fi
+                ;;
+            macos)
+                if launchctl list | grep -q vibemanager 2>/dev/null; then
+                    log_info "Restarting launchd service..."
+                    launchctl stop com.vibemanager 2>/dev/null || true
+                    launchctl start com.vibemanager
+                    log_success "Service restarted"
+                else
+                    log_warn "Service not running. Start with: launchctl start com.vibemanager"
+                fi
+                ;;
+        esac
+    fi
+
+    echo ""
+    log_success "Update complete!"
+    echo ""
+    echo -e "  ${CYAN}VibeManager${NC} is running at: ${BOLD}http://localhost:$PORT${NC}"
+    echo ""
+}
+
 # Main
 main() {
     print_banner
@@ -435,12 +525,17 @@ main() {
             uninstall
             exit 0
             ;;
+        --update)
+            update
+            exit 0
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
             echo "  --docker      Install with Docker (recommended)"
             echo "  --local       Install locally without Docker"
+            echo "  --update      Update existing installation"
             echo "  --uninstall   Remove VibeManager"
             echo "  --help        Show this help"
             echo ""
