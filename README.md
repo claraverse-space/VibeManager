@@ -13,49 +13,461 @@ Perfect for kicking off multiple AI coding sessions on your Raspberry Pi or serv
                                               /____/
 ```
 
-## Features
+## 🚀 Quick Start
 
-- **Ralph Autonomous Coding Loop** - AI agent that works through tasks autonomously with fresh context each iteration
-- **Smart Task Completion Detection** - Multi-layer validation system (status file → task tools → terminal scraping)
-- **Real-Time Progress Tracking** - Live progress bars, task steps, and status updates via WebSocket
-- **Intelligent Verification System** - When tasks get stuck, verify with Claude if they're actually complete before moving on
-- **Multi-Session Management** - Run multiple AI coding sessions simultaneously
-- **Session Recovery** - Automatic session revival and checkpoint system
-- **Web Dashboard** - Monitor all sessions from a clean web interface
-- **Code Server Integration** - Built-in VS Code server for each project
+```bash
+# Install
+curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash
 
-## Ralph Verification Feature
+# Update
+curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash -s -- --update
 
-When Ralph detects a task is stuck (no progress after 3 iterations), the system now asks Claude to verify if the task is actually complete:
+# Uninstall
+curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash -s -- --uninstall
+```
 
-- **Verify & Resume** button appears when stuck
-- Sends special verification prompt asking Claude to confirm completion status
-- Claude responds with `VERIFICATION: TASK COMPLETED` or `VERIFICATION: TASK BLOCKED`
-- System automatically processes verification and moves to next task if complete
-- Makes task completion 100% reliable by eliminating false stuck states
+Access at: **http://localhost:3131**
+
+---
+
+## 📸 Features Overview
+
+### 🎯 Main Dashboard - Manage All Your AI Sessions
+
+Monitor multiple AI coding sessions from a single interface. Each session card shows:
+- **Project name and path**
+- **AI agent type** (Claude Code, OpenCode, or Bash)
+- **Live status** indicator (alive/stopped)
+- **Quick actions**: Code editor, Terminal attach, Tasks, Logs
+- **Session metrics** and last access time
+
+![Dashboard Overview](docs/dashboard.png)
+
+---
+
+### 🔍 Session Details - Deep Dive Into Each Project
+
+Click any session card to see detailed information:
+- **Project configuration** and settings
+- **Current working directory** and git status
+- **Session metadata** (tmux session, shell type, autonomous mode)
+- **Quick access buttons** for all session actions
+- **Port information** for code-server and other services
+
+![Session Details](docs/session-details.png)
+
+---
+
+### 🗂️ All Sessions Overview - Birds-Eye View
+
+Scroll through all your active and stopped sessions in one place:
+- **Multiple sessions** displayed in a clean grid layout
+- **Color-coded status** indicators for quick identification
+- **Port numbers** visible for each service
+- **Batch operations** support (coming soon)
+- **Search and filter** capabilities
+
+![Sessions Overview](docs/sessions-overview.png)
+
+---
+
+### 💻 Built-in VS Code Editor - Code Without Leaving VibeManager
+
+Each session comes with an integrated VS Code server:
+- **Full VS Code experience** in your browser
+- **No local installation** required
+- **Automatic port management** (default: 8083)
+- **Project files** loaded and ready to edit
+- **Extensions support** for your favorite tools
+- **Multi-file editing** with split views
+- **Git integration** built-in
+
+Click the **"Code"** button on any session card to launch the editor.
+
+> **Note**: The editor opens in a new tab with full VS Code functionality
+
+---
+
+### 🖥️ Terminal Attachment - Direct Access to Your AI Agent
+
+Attach directly to the tmux session running your AI agent:
+- **Real-time terminal view** of AI agent activity
+- **Full terminal emulation** with color support
+- **Scrollback history** preserved
+- **Interactive mode** - send commands directly
+- **Copy/paste support** for code and output
+- **Detach anytime** without stopping the session
+
+![Attach Terminal](docs/attach-terminal.png)
+
+**How it works:**
+1. Click **"Attach"** on any session card
+2. View live terminal output from the AI agent
+3. See exactly what Claude/OpenCode is doing
+4. Detach with `Ctrl+B` then `D` (standard tmux)
+
+---
+
+### ✅ Ralph Autonomous Loop - AI That Works While You Sleep
+
+Ralph is an autonomous coding loop that executes tasks with fresh context each iteration:
+
+**Key Features:**
+- **Task-based workflow**: Define tasks in a PRD (Product Requirements Document)
+- **Fresh context per iteration**: No token limit issues
+- **Auto-progression**: Moves to next task when current completes
+- **Circuit breaker**: Stops if task gets stuck (configurable threshold)
+- **Multi-layer completion detection**:
+  1. **Status file** (primary) - AI writes `.ralph/status.json`
+  2. **Claude task tools** (secondary) - Uses TaskCreate/TaskUpdate
+  3. **Terminal scraping** (fallback) - Detects "DONE" keyword
+
+**Workflow:**
+```
+Task 1 → AI works → Complete → Task 2 → AI works → Complete → Task 3...
+```
+
+Each iteration gets a fresh Claude session, so Ralph never hits token limits!
+
+---
+
+### 🎯 Intelligent Verification System - Never Get Stuck Again
+
+When Ralph detects a task is stuck (no progress after 3 iterations), the **Verify & Resume** feature kicks in:
 
 ![Verification Feature](docs/verification-feature.png)
 
-## Install
+**What happens:**
+1. **Detection**: System notices task hasn't progressed in 3 iterations
+2. **Status changes to STUCK**: Circuit breaker activates
+3. **Verify & Resume button appears**: User (or system) can trigger verification
+4. **Special prompt sent**: Asks Claude: "Is this task actually complete?"
+5. **Claude responds**:
+   - `VERIFICATION: TASK COMPLETED` → Mark complete, move to next task
+   - `VERIFICATION: TASK BLOCKED - <reason>` → Show blocking reason, needs help
+   - Continues working → Task wasn't stuck, just slow
+6. **Auto-progression**: If verified complete, next task starts automatically
+
+**Why this matters:**
+- **Eliminates false positives**: Task might be complete but system didn't detect it
+- **Reduces manual intervention**: Automatic recovery from stuck states
+- **100% reliable**: Multi-layer validation ensures accuracy
+- **Transparency**: See exactly why a task got stuck
+
+**UI Features:**
+- **STUCK badge**: Red indicator in Ralph status
+- **Progress bar**: Shows last known progress (e.g., 45%)
+- **Warning message**: "Task stuck at 45% - No progress after 3 attempts"
+- **Verify & Resume**: Highlighted button to trigger verification
+- **Force Resume**: Manual override if you want to continue anyway
+- **Stop**: Halt Ralph loop entirely
+
+---
+
+### 📊 Real-Time Progress Tracking
+
+Every task shows live progress with rich visual indicators:
+
+**Progress Components:**
+- **Progress bar**: 0-100% completion with smooth animations
+- **Current step**: What the AI is doing right now
+- **Task steps**: Visual indicators for each phase
+  - 🔵 **Analyze** - Understanding requirements
+  - 🔵 **Implement** - Writing code
+  - 🔵 **Test** - Running tests
+  - 🔵 **Commit** - Git commit
+  - 🔵 **Verify** - Final validation
+- **Status updates**: Real-time via WebSocket (5-second polling)
+- **Completion timestamp**: When task finished
+
+**Status Types:**
+- `pending` - Not started yet
+- `in_progress` - Currently working
+- `completed` - Successfully finished
+- `blocked` - Waiting on something
+- `error` - Failed with error
+
+---
+
+### 📝 Task Management System
+
+Define and track tasks for Ralph to execute:
+
+**Task Structure:**
+```json
+{
+  "id": "story-1",
+  "title": "Add user authentication",
+  "description": "Implement JWT-based auth with login/logout",
+  "status": "in_progress",
+  "progress": 65,
+  "steps": [
+    {"name": "analyze", "status": "completed"},
+    {"name": "implement", "status": "in_progress"},
+    {"name": "test", "status": "pending"}
+  ]
+}
+```
+
+**Features:**
+- **Create tasks**: Add new tasks to the queue
+- **Edit tasks**: Modify title, description, or details
+- **Reorder tasks**: Drag-and-drop (coming soon)
+- **Task dependencies**: Define blockers (coming soon)
+- **Task history**: See all attempts and iterations
+- **Validation layers**: 4-layer validation ensures completion
+  1. **Syntax**: Valid JSON in status file
+  2. **Schema**: Required fields present
+  3. **Semantic**: Logical consistency
+  4. **Outcome**: Git commit exists, tests passed
+
+---
+
+### 🔄 Session Management
+
+**Create Sessions:**
+- Click **"+ New Session"** button
+- Choose project name and path
+- Select AI agent (Claude Code, OpenCode, or Bash)
+- Enable autonomous mode for Ralph
+
+**Session Actions:**
+- **Start/Stop**: Launch or terminate sessions
+- **Revive**: Restart a stopped session
+- **Delete**: Remove session permanently
+- **Clone**: Duplicate session configuration (coming soon)
+
+**Session Persistence:**
+- **Automatic checkpoints**: Saved at key moments
+- **Scrollback history**: Terminal output preserved
+- **PRD state**: Tasks and progress saved
+- **Session metadata**: All configuration persisted
+
+---
+
+### 🔌 Port Management
+
+VibeManager automatically manages ports for each service:
+
+**Default Ports:**
+- **VibeManager Dashboard**: `3131`
+- **Code Server (VS Code)**: `8083`
+- **Session ports**: Auto-assigned from available pool
+
+**Port Selection:**
+- Automatically finds free ports
+- No conflicts between sessions
+- Environment variables supported:
+  - `VIBEMANAGER_PORT=3131`
+  - `VIBEMANAGER_CODE_PORT=8083`
+
+---
+
+## 🛠️ Installation
+
+### Prerequisites
+
+- **Node.js** 18+ (installed automatically)
+- **tmux** (for session management)
+- **git** (for version control)
+- **curl** (for installation)
+
+### Local Installation
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash
 ```
 
-The installer will prompt you to choose Docker or Local installation.
+**What gets installed:**
+- VibeManager to `~/.vibemanager`
+- code-server (VS Code) for browser editing
+- systemd service (Linux) or launchd (macOS)
+- All Node.js dependencies
 
-## Update
-
+**Service Management:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash -s -- --update
+# Linux
+systemctl --user status vibemanager
+systemctl --user restart vibemanager
+
+# macOS
+launchctl list | grep vibemanager
+launchctl kickstart -k gui/$UID/com.vibemanager
 ```
 
-## Uninstall
+### Docker Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash -s -- --uninstall
+# Choose Docker when prompted during install
+curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash
 ```
 
-## License
+**Benefits:**
+- Isolated environment
+- No system dependencies
+- Easy cleanup
+- Consistent across platforms
 
-MIT
+---
+
+## 🔧 Configuration
+
+### Environment Variables
+
+```bash
+export VIBEMANAGER_DIR="$HOME/.vibemanager"
+export VIBEMANAGER_PORT="3131"
+export VIBEMANAGER_CODE_PORT="8083"
+```
+
+### Ralph Configuration
+
+**Circuit Breaker Settings:**
+- `maxIterations`: Maximum loops before stopping (default: 50)
+- `circuitBreakerThreshold`: Stuck detection threshold (default: 3)
+
+**Status File Location:**
+- `.ralph/status.json` in project root
+- Written by AI agent during task execution
+- 4-layer validation on read
+
+### PRD (Product Requirements Document)
+
+Define tasks in JSON format:
+
+```json
+{
+  "name": "My Awesome Project",
+  "description": "Build something amazing",
+  "stories": [
+    {
+      "id": "story-1",
+      "title": "Setup project structure",
+      "description": "Initialize npm, create folders, add README"
+    },
+    {
+      "id": "story-2",
+      "title": "Implement core features",
+      "description": "Build main functionality with tests"
+    }
+  ]
+}
+```
+
+---
+
+## 📚 API Reference
+
+### REST Endpoints
+
+**Sessions:**
+```
+GET    /api/sessions              List all sessions
+GET    /api/sessions/:name        Get session details
+POST   /api/sessions              Create new session
+DELETE /api/sessions/:name        Delete session
+POST   /api/sessions/:name/revive Restart session
+```
+
+**Ralph Loop:**
+```
+POST   /api/sessions/:name/ralph/start   Start autonomous loop
+POST   /api/sessions/:name/ralph/pause   Pause loop
+POST   /api/sessions/:name/ralph/resume  Resume loop
+POST   /api/sessions/:name/ralph/verify  Verify stuck task
+POST   /api/sessions/:name/ralph/stop    Stop loop
+GET    /api/sessions/:name/ralph/status  Get loop status
+```
+
+**Tasks:**
+```
+GET    /api/sessions/:name/tasks                Get all tasks
+GET    /api/sessions/:name/tasks/:id            Get task details
+GET    /api/sessions/:name/tasks/:id/progress   Get live progress
+POST   /api/sessions/:name/tasks                Create task
+PUT    /api/sessions/:name/tasks/:id            Update task
+DELETE /api/sessions/:name/tasks/:id            Delete task
+```
+
+### WebSocket Events
+
+Connect to `ws://localhost:3131` for real-time updates:
+
+**Events:**
+```javascript
+{
+  type: 'task_progress',
+  sessionName: 'my-project',
+  data: {
+    taskId: 'story-1',
+    progress: 75,
+    currentStep: 'Running tests'
+  }
+}
+
+{
+  type: 'ralph_update',
+  sessionName: 'my-project',
+  data: {
+    status: 'running',
+    iterationCount: 5,
+    currentTaskId: 'story-2'
+  }
+}
+
+{
+  type: 'task_complete',
+  sessionName: 'my-project',
+  data: {
+    taskId: 'story-1',
+    completedAt: '2026-01-26T20:00:00.000Z'
+  }
+}
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Please read our contributing guidelines.
+
+**Development Setup:**
+```bash
+git clone https://github.com/claraverse-space/VibeManager.git
+cd VibeManager
+npm install
+npm start
+```
+
+**Testing:**
+```bash
+npm test                    # Run all tests
+npm run test:unit          # Unit tests only
+npm run test:integration   # Integration tests only
+```
+
+---
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) file for details
+
+---
+
+## 🙏 Acknowledgments
+
+- **Claude Code** by Anthropic - The autonomous AI coding assistant
+- **code-server** - VS Code in the browser
+- **tmux** - Terminal multiplexer for session management
+
+---
+
+## 📞 Support
+
+- **GitHub Issues**: [Report bugs or request features](https://github.com/claraverse-space/VibeManager/issues)
+- **Documentation**: [Full docs](https://github.com/claraverse-space/VibeManager/wiki)
+- **Discord**: [Join our community](https://discord.gg/vibemanager) (coming soon)
+
+---
+
+Made with ❤️ by the Claraverse team
