@@ -978,6 +978,161 @@
     .sysmon-net .rx { color: var(--success); }
     .sysmon-net .tx { color: var(--accent); }
 
+    /* GPU Panel */
+    .gpu-panel {
+      background: var(--surface);
+      border-radius: 0;
+      flex-shrink: 0;
+      margin-top: 16px;
+      overflow: hidden;
+    }
+
+    .gpu-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.2s;
+    }
+
+    .gpu-header:hover {
+      background: var(--surface2);
+    }
+
+    .gpu-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+    }
+
+    .gpu-count {
+      font-size: 10px;
+      padding: 2px 6px;
+      background: var(--surface3);
+      border-radius: 3px;
+      color: var(--text);
+    }
+
+    .gpu-toggle {
+      font-size: 12px;
+      color: var(--text-dim);
+      transition: transform 0.3s;
+    }
+
+    .gpu-panel.collapsed .gpu-toggle {
+      transform: rotate(-90deg);
+    }
+
+    .gpu-content {
+      max-height: 1000px;
+      opacity: 1;
+      transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+      padding: 0 16px 16px 16px;
+    }
+
+    .gpu-panel.collapsed .gpu-content {
+      max-height: 0;
+      opacity: 0;
+      padding: 0 16px;
+      overflow: hidden;
+    }
+
+    .gpu-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    .gpu-card {
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .gpu-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .gpu-card-vendor {
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .gpu-card-name {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    .gpu-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .gpu-metric {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .gpu-metric-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    .gpu-metric-value {
+      font-family: monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+      transition: color 0.3s;
+    }
+
+    .gpu-metric-bar {
+      height: 4px;
+      background: var(--surface3);
+      border-radius: 2px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .gpu-metric-bar-fill {
+      height: 100%;
+      transition: width 0.5s ease, background-color 0.3s;
+      border-radius: 2px;
+    }
+
+    .gpu-metric-bar-fill.cool { background: var(--success); }
+    .gpu-metric-bar-fill.warm { background: var(--warn); }
+    .gpu-metric-bar-fill.hot { background: var(--danger); }
+
+    .gpu-metric-subtext {
+      font-size: 9px;
+      color: var(--text-dim);
+      opacity: 0.7;
+    }
+
+    @media (max-width: 600px) {
+      .gpu-metrics { grid-template-columns: 1fr; }
+    }
+
     /* Memory Panel */
     .memory-panel {
       background: var(--surface);
@@ -2011,6 +2166,19 @@
       <div class="sysmon" id="sysmon">
         <div class="sysmon-title">System Monitor</div>
         <div class="sysmon-grid" id="sysmon-grid"></div>
+      </div>
+
+      <div class="gpu-panel" id="gpu-panel" style="display: none;">
+        <div class="gpu-header" onclick="toggleGPUPanel()">
+          <div class="gpu-title">
+            <span>🎮 GPU Monitor</span>
+            <span class="gpu-count" id="gpu-count"></span>
+          </div>
+          <div class="gpu-toggle" id="gpu-toggle">▼</div>
+        </div>
+        <div class="gpu-content" id="gpu-content">
+          <div class="gpu-grid" id="gpu-grid"></div>
+        </div>
       </div>
 
       <div class="memory-panel" id="memory-panel">
@@ -3680,6 +3848,14 @@
 
     // --- GPU Stats ---
     let gpuHistory = {}; // gpu index -> history array
+    let gpuInitialized = false;
+
+    // Toggle GPU panel collapse
+    function toggleGPUPanel() {
+      const panel = document.getElementById('gpu-panel');
+      const isCollapsed = panel.classList.toggle('collapsed');
+      localStorage.setItem('gpuPanelCollapsed', isCollapsed);
+    }
 
     async function fetchGPUStats() {
       try {
@@ -3687,89 +3863,170 @@
         if (!response.ok) return;
 
         const data = await response.json();
-        renderGPUStats(data.gpus);
+
+        if (data.gpus && data.gpus.length > 0) {
+          if (!gpuInitialized) {
+            initGPUPanel(data.gpus);
+            gpuInitialized = true;
+          } else {
+            updateGPUStats(data.gpus);
+          }
+        }
       } catch (err) {
         console.error('Failed to fetch GPU stats:', err);
       }
     }
 
-    function renderGPUStats(gpus) {
-      if (!gpus || gpus.length === 0) return;
+    function initGPUPanel(gpus) {
+      const panel = document.getElementById('gpu-panel');
+      const count = document.getElementById('gpu-count');
+      const grid = document.getElementById('gpu-grid');
 
-      const grid = document.getElementById('sysmon-grid');
-      let gpuHTML = '';
+      // Show panel and set count
+      panel.style.display = 'block';
+      count.textContent = `${gpus.length} GPU${gpus.length > 1 ? 's' : ''}`;
 
+      // Restore collapsed state
+      const isCollapsed = localStorage.getItem('gpuPanelCollapsed') === 'true';
+      if (isCollapsed) {
+        panel.classList.add('collapsed');
+      }
+
+      // Create GPU cards
+      grid.innerHTML = '';
       for (const gpu of gpus) {
-        // Initialize history for this GPU
-        if (!gpuHistory[gpu.index]) {
-          gpuHistory[gpu.index] = { util: [], mem: [], temp: [] };
+        const card = document.createElement('div');
+        card.className = 'gpu-card';
+        card.id = `gpu-card-${gpu.index}`;
+
+        card.innerHTML = `
+          <div class="gpu-card-header">
+            <div>
+              <div class="gpu-card-vendor">${gpu.vendor} GPU ${gpu.index}</div>
+              <div class="gpu-card-name">${gpu.name}</div>
+            </div>
+          </div>
+          <div class="gpu-metrics">
+            <div class="gpu-metric">
+              <div class="gpu-metric-label">
+                <span>GPU Utilization</span>
+                <span class="gpu-metric-value" id="gpu-${gpu.index}-util-value">0%</span>
+              </div>
+              <div class="gpu-metric-bar">
+                <div class="gpu-metric-bar-fill" id="gpu-${gpu.index}-util-bar" style="width: 0%;"></div>
+              </div>
+            </div>
+            <div class="gpu-metric">
+              <div class="gpu-metric-label">
+                <span>Memory</span>
+                <span class="gpu-metric-value" id="gpu-${gpu.index}-mem-value">0%</span>
+              </div>
+              <div class="gpu-metric-bar">
+                <div class="gpu-metric-bar-fill" id="gpu-${gpu.index}-mem-bar" style="width: 0%;"></div>
+              </div>
+              <div class="gpu-metric-subtext" id="gpu-${gpu.index}-mem-text">0 / 0 MiB</div>
+            </div>
+            <div class="gpu-metric">
+              <div class="gpu-metric-label">
+                <span>Temperature</span>
+                <span class="gpu-metric-value" id="gpu-${gpu.index}-temp-value">0°C</span>
+              </div>
+              <div class="gpu-metric-bar">
+                <div class="gpu-metric-bar-fill" id="gpu-${gpu.index}-temp-bar" style="width: 0%;"></div>
+              </div>
+            </div>
+            <div class="gpu-metric">
+              <div class="gpu-metric-label">
+                <span>Power Draw</span>
+                <span class="gpu-metric-value" id="gpu-${gpu.index}-power-value">0W</span>
+              </div>
+              <div class="gpu-metric-bar">
+                <div class="gpu-metric-bar-fill" id="gpu-${gpu.index}-power-bar" style="width: 0%;"></div>
+              </div>
+              <div class="gpu-metric-subtext" id="gpu-${gpu.index}-power-text">Limit: 0W</div>
+            </div>
+          </div>
+          ${gpu.note ? `<div class="gpu-metric-subtext" style="margin-top: 4px;">${gpu.note}</div>` : ''}
+        `;
+
+        grid.appendChild(card);
+
+        // Initialize history
+        gpuHistory[gpu.index] = { util: [], mem: [], temp: [], power: [] };
+      }
+    }
+
+    function updateGPUStats(gpus) {
+      for (const gpu of gpus) {
+        const idx = gpu.index;
+
+        // Update history
+        if (!gpuHistory[idx]) {
+          gpuHistory[idx] = { util: [], mem: [], temp: [], power: [] };
         }
 
-        const hist = gpuHistory[gpu.index];
+        const hist = gpuHistory[idx];
         hist.util.push(gpu.utilization.gpu);
         hist.mem.push(gpu.utilization.memory);
         hist.temp.push(gpu.temperature);
+        hist.power.push(gpu.power.draw);
 
         // Keep last 20 samples
-        if (hist.util.length > 20) hist.util.shift();
-        if (hist.mem.length > 20) hist.mem.shift();
-        if (hist.temp.length > 20) hist.temp.shift();
+        if (hist.util.length > 20) {
+          hist.util.shift();
+          hist.mem.shift();
+          hist.temp.shift();
+          hist.power.shift();
+        }
 
+        // Get color classes
         const tempColor = gpu.temperature > 80 ? 'hot' : gpu.temperature > 65 ? 'warm' : 'cool';
         const utilColor = gpu.utilization.gpu > 80 ? 'hot' : gpu.utilization.gpu > 50 ? 'warm' : 'cool';
         const memColor = gpu.utilization.memory > 85 ? 'hot' : gpu.utilization.memory > 60 ? 'warm' : 'cool';
+        const powerColor = (gpu.power.limit > 0 && gpu.power.draw > gpu.power.limit * 0.9) ? 'hot' : 'cool';
 
-        gpuHTML += `
-          <div class="sysmon-item" style="grid-column: span 2;">
-            <div class="sysmon-label" style="margin-bottom: 8px;">
-              <span style="font-weight: 500;">${gpu.vendor} GPU ${gpu.index}</span>
-              <span class="sysmon-value">${gpu.name}</span>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-              <div>
-                <div class="sysmon-label" style="font-size: 10px; margin-bottom: 4px;">
-                  <span>GPU Utilization</span><span class="sysmon-value">${gpu.utilization.gpu.toFixed(0)}%</span>
-                </div>
-                <div class="sysmon-bar ${utilColor}">${makeBar(gpu.utilization.gpu)}</div>
-                <div class="sysmon-sparkline">${makeSparkline(hist.util)}</div>
-              </div>
-              <div>
-                <div class="sysmon-label" style="font-size: 10px; margin-bottom: 4px;">
-                  <span>Memory</span><span class="sysmon-value">${gpu.utilization.memory.toFixed(0)}%</span>
-                </div>
-                <div class="sysmon-bar ${memColor}">${makeBar(gpu.utilization.memory)}</div>
-                <div class="sysmon-label" style="font-size: 9px; opacity: 0.7;">
-                  <span>${gpu.memory.used.toFixed(0)} / ${gpu.memory.total.toFixed(0)} ${gpu.memory.unit}</span>
-                </div>
-              </div>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
-              <div>
-                <div class="sysmon-label" style="font-size: 10px; margin-bottom: 4px;">
-                  <span>Temperature</span><span class="sysmon-value">${gpu.temperature.toFixed(0)}°C</span>
-                </div>
-                <div class="sysmon-bar ${tempColor}">${makeBar(Math.min(gpu.temperature, 95) / 95 * 100)}</div>
-                <div class="sysmon-sparkline">${makeSparkline(hist.temp)}</div>
-              </div>
-              <div>
-                <div class="sysmon-label" style="font-size: 10px; margin-bottom: 4px;">
-                  <span>Power Draw</span><span class="sysmon-value">${gpu.power.draw.toFixed(0)}${gpu.power.unit}</span>
-                </div>
-                <div class="sysmon-bar ${gpu.power.draw > gpu.power.limit * 0.9 ? 'hot' : 'cool'}">
-                  ${makeBar(gpu.power.limit > 0 ? (gpu.power.draw / gpu.power.limit * 100) : 0)}
-                </div>
-                <div class="sysmon-label" style="font-size: 9px; opacity: 0.7;">
-                  <span>Limit: ${gpu.power.limit.toFixed(0)}${gpu.power.unit}</span>
-                </div>
-              </div>
-            </div>
-            ${gpu.note ? `<div class="sysmon-label" style="font-size: 9px; opacity: 0.6; margin-top: 4px;"><span>${gpu.note}</span></div>` : ''}
-          </div>
-        `;
+        // Update GPU Utilization
+        const utilValue = document.getElementById(`gpu-${idx}-util-value`);
+        const utilBar = document.getElementById(`gpu-${idx}-util-bar`);
+        if (utilValue && utilBar) {
+          utilValue.textContent = `${gpu.utilization.gpu.toFixed(0)}%`;
+          utilBar.style.width = `${gpu.utilization.gpu}%`;
+          utilBar.className = `gpu-metric-bar-fill ${utilColor}`;
+        }
+
+        // Update Memory
+        const memValue = document.getElementById(`gpu-${idx}-mem-value`);
+        const memBar = document.getElementById(`gpu-${idx}-mem-bar`);
+        const memText = document.getElementById(`gpu-${idx}-mem-text`);
+        if (memValue && memBar && memText) {
+          memValue.textContent = `${gpu.utilization.memory.toFixed(0)}%`;
+          memBar.style.width = `${gpu.utilization.memory}%`;
+          memBar.className = `gpu-metric-bar-fill ${memColor}`;
+          memText.textContent = `${gpu.memory.used.toFixed(0)} / ${gpu.memory.total.toFixed(0)} ${gpu.memory.unit}`;
+        }
+
+        // Update Temperature
+        const tempValue = document.getElementById(`gpu-${idx}-temp-value`);
+        const tempBar = document.getElementById(`gpu-${idx}-temp-bar`);
+        if (tempValue && tempBar) {
+          tempValue.textContent = `${gpu.temperature.toFixed(0)}°C`;
+          const tempPercent = Math.min(gpu.temperature, 95) / 95 * 100;
+          tempBar.style.width = `${tempPercent}%`;
+          tempBar.className = `gpu-metric-bar-fill ${tempColor}`;
+        }
+
+        // Update Power
+        const powerValue = document.getElementById(`gpu-${idx}-power-value`);
+        const powerBar = document.getElementById(`gpu-${idx}-power-bar`);
+        const powerText = document.getElementById(`gpu-${idx}-power-text`);
+        if (powerValue && powerBar && powerText) {
+          powerValue.textContent = `${gpu.power.draw.toFixed(0)}${gpu.power.unit}`;
+          const powerPercent = gpu.power.limit > 0 ? (gpu.power.draw / gpu.power.limit * 100) : 0;
+          powerBar.style.width = `${powerPercent}%`;
+          powerBar.className = `gpu-metric-bar-fill ${powerColor}`;
+          powerText.textContent = `Limit: ${gpu.power.limit.toFixed(0)}${gpu.power.unit}`;
+        }
       }
-
-      // Append GPU stats to grid
-      grid.insertAdjacentHTML('beforeend', gpuHTML);
     }
 
     // --- Views ---
