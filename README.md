@@ -263,6 +263,91 @@ VibeManager automatically manages ports for each service:
 
 ---
 
+### 🎮 GPU Monitoring - Real-Time Hardware Stats
+
+VibeManager includes comprehensive GPU monitoring for all major GPU vendors on all platforms:
+
+**Supported GPUs:**
+- **NVIDIA** (nvidia-smi) - RTX 40xx/30xx/20xx, Tesla, Quadro, etc.
+- **AMD** (rocm-smi) - Radeon RX 7000/6000/5000, Radeon Pro, etc.
+- **Intel Arc** (xpu-smi) - Arc A-series discrete GPUs
+- **macOS Metal** - Apple Silicon (M1/M2/M3) and discrete GPUs
+- **Generic Linux** - Fallback detection for any GPU via sysfs
+
+**Real-Time Metrics (per GPU):**
+- **GPU Utilization**: Live usage percentage with sparkline graphs
+- **Memory Usage**: VRAM used/total with utilization percentage
+- **Temperature**: Current temp with color-coded thresholds (cool/warm/hot)
+- **Power Draw**: Current power consumption vs. limit
+- **Historical Trends**: Sparkline graphs showing last 20 samples
+- **GPU Info**: Vendor, model name, index
+
+**Visual Features:**
+- **Multi-GPU Support**: Display stats for all GPUs simultaneously
+- **Color-Coded Bars**: Green (cool), yellow (warm), red (hot) based on thresholds
+- **Sparkline Graphs**: Historical trends for utilization, memory, and temperature
+- **2-Column Layout**: Efficient display for multiple metrics per GPU
+- **Auto-Refresh**: Updates with system stats via WebSocket
+
+**Platform Detection:**
+The system automatically detects and uses the best available monitoring tool:
+- Linux with NVIDIA → `nvidia-smi` (full stats)
+- Linux with AMD → `rocm-smi` (full stats) or `radeontop` (basic)
+- Linux with Intel Arc → `xpu-smi` (full stats) or `intel_gpu_top` (basic)
+- macOS → `system_profiler` (GPU info, VRAM)
+- Linux fallback → `sysfs` (/sys/class/drm detection)
+
+**API Endpoints:**
+```bash
+# Get detailed stats for all GPUs
+GET /api/gpu/stats
+
+# Get summary (count, vendors, total memory, avg utilization)
+GET /api/gpu/summary
+
+# Get available monitoring tools
+GET /api/gpu/monitors
+```
+
+**Example Output:**
+```json
+{
+  "timestamp": "2026-01-26T15:07:31.956Z",
+  "platform": "linux",
+  "gpus": [
+    {
+      "index": 0,
+      "vendor": "NVIDIA",
+      "name": "NVIDIA GeForce RTX 4090",
+      "temperature": 38,
+      "utilization": {
+        "gpu": 45,
+        "memory": 30
+      },
+      "memory": {
+        "used": 7230,
+        "total": 24564,
+        "unit": "MiB"
+      },
+      "power": {
+        "draw": 180.5,
+        "limit": 500,
+        "unit": "W"
+      }
+    }
+  ]
+}
+```
+
+**Installation Notes:**
+- **NVIDIA**: Install NVIDIA drivers and CUDA toolkit
+- **AMD**: Install ROCm for `rocm-smi`, or use `radeontop` (may need sudo)
+- **Intel Arc**: Install Intel GPU drivers and `xpu-smi`
+- **macOS**: Works out of the box, limited stats available
+- **No GPU tools**: Falls back to basic detection via Linux sysfs
+
+---
+
 ## 🛠️ Installation
 
 ### Prerequisites
