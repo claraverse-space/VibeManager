@@ -3673,6 +3673,103 @@
           <div class="sysmon-label"><span>Total: ▼${formatBytesRaw(d.net.rx)} ▲${formatBytesRaw(d.net.tx)}</span></div>
         </div>
       `;
+
+      // Add GPU stats
+      fetchGPUStats();
+    }
+
+    // --- GPU Stats ---
+    let gpuHistory = {}; // gpu index -> history array
+
+    async function fetchGPUStats() {
+      try {
+        const response = await fetch('/api/gpu/stats');
+        if (!response.ok) return;
+
+        const data = await response.json();
+        renderGPUStats(data.gpus);
+      } catch (err) {
+        console.error('Failed to fetch GPU stats:', err);
+      }
+    }
+
+    function renderGPUStats(gpus) {
+      if (!gpus || gpus.length === 0) return;
+
+      const grid = document.getElementById('sysmon-grid');
+      let gpuHTML = '';
+
+      for (const gpu of gpus) {
+        // Initialize history for this GPU
+        if (!gpuHistory[gpu.index]) {
+          gpuHistory[gpu.index] = { util: [], mem: [], temp: [] };
+        }
+
+        const hist = gpuHistory[gpu.index];
+        hist.util.push(gpu.utilization.gpu);
+        hist.mem.push(gpu.utilization.memory);
+        hist.temp.push(gpu.temperature);
+
+        // Keep last 20 samples
+        if (hist.util.length > 20) hist.util.shift();
+        if (hist.mem.length > 20) hist.mem.shift();
+        if (hist.temp.length > 20) hist.temp.shift();
+
+        const tempColor = gpu.temperature > 80 ? 'hot' : gpu.temperature > 65 ? 'warm' : 'cool';
+        const utilColor = gpu.utilization.gpu > 80 ? 'hot' : gpu.utilization.gpu > 50 ? 'warm' : 'cool';
+        const memColor = gpu.utilization.memory > 85 ? 'hot' : gpu.utilization.memory > 60 ? 'warm' : 'cool';
+
+        gpuHTML += `
+          <div class="sysmon-item" style="grid-column: span 2;">
+            <div class="sysmon-label" style="margin-bottom: 8px;">
+              <span style="font-weight: 500;">${gpu.vendor} GPU ${gpu.index}</span>
+              <span class="sysmon-value">${gpu.name}</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div>
+                <div class="sysmon-label" style="font-size: 10px; margin-bottom: 4px;">
+                  <span>GPU Utilization</span><span class="sysmon-value">${gpu.utilization.gpu.toFixed(0)}%</span>
+                </div>
+                <div class="sysmon-bar ${utilColor}">${makeBar(gpu.utilization.gpu)}</div>
+                <div class="sysmon-sparkline">${makeSparkline(hist.util)}</div>
+              </div>
+              <div>
+                <div class="sysmon-label" style="font-size: 10px; margin-bottom: 4px;">
+                  <span>Memory</span><span class="sysmon-value">${gpu.utilization.memory.toFixed(0)}%</span>
+                </div>
+                <div class="sysmon-bar ${memColor}">${makeBar(gpu.utilization.memory)}</div>
+                <div class="sysmon-label" style="font-size: 9px; opacity: 0.7;">
+                  <span>${gpu.memory.used.toFixed(0)} / ${gpu.memory.total.toFixed(0)} ${gpu.memory.unit}</span>
+                </div>
+              </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
+              <div>
+                <div class="sysmon-label" style="font-size: 10px; margin-bottom: 4px;">
+                  <span>Temperature</span><span class="sysmon-value">${gpu.temperature.toFixed(0)}°C</span>
+                </div>
+                <div class="sysmon-bar ${tempColor}">${makeBar(Math.min(gpu.temperature, 95) / 95 * 100)}</div>
+                <div class="sysmon-sparkline">${makeSparkline(hist.temp)}</div>
+              </div>
+              <div>
+                <div class="sysmon-label" style="font-size: 10px; margin-bottom: 4px;">
+                  <span>Power Draw</span><span class="sysmon-value">${gpu.power.draw.toFixed(0)}${gpu.power.unit}</span>
+                </div>
+                <div class="sysmon-bar ${gpu.power.draw > gpu.power.limit * 0.9 ? 'hot' : 'cool'}">
+                  ${makeBar(gpu.power.limit > 0 ? (gpu.power.draw / gpu.power.limit * 100) : 0)}
+                </div>
+                <div class="sysmon-label" style="font-size: 9px; opacity: 0.7;">
+                  <span>Limit: ${gpu.power.limit.toFixed(0)}${gpu.power.unit}</span>
+                </div>
+              </div>
+            </div>
+            ${gpu.note ? `<div class="sysmon-label" style="font-size: 9px; opacity: 0.6; margin-top: 4px;"><span>${gpu.note}</span></div>` : ''}
+          </div>
+        `;
+      }
+
+      // Append GPU stats to grid
+      grid.insertAdjacentHTML('beforeend', gpuHTML);
     }
 
     // --- Views ---

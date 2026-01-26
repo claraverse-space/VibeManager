@@ -119,6 +119,8 @@ const sessionManager = new SessionManager();
 const ralphLoop = new RalphLoop(sessionManager);
 const conversationLinker = new ConversationLinker();
 const summaryGenerator = new SummaryGenerator();
+const GPUMonitor = require('./gpu-monitor');
+const gpuMonitor = new GPUMonitor();
 const terminals = new Map(); // termId -> { term, sessionName, ws }
 const activeAttachments = new Map(); // sessionName -> Set<ws>
 
@@ -1140,6 +1142,36 @@ app.patch('/api/settings', (req, res) => {
 app.post('/api/settings/test', async (req, res) => {
   const result = await summaryGenerator.testConnection();
   res.json(result);
+});
+
+// --- GPU Monitoring APIs ---
+
+// Get all GPU stats
+app.get('/api/gpu/stats', (req, res) => {
+  try {
+    const stats = gpuMonitor.getAllGPUStats();
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get GPU summary
+app.get('/api/gpu/summary', (req, res) => {
+  try {
+    const summary = gpuMonitor.getSummary();
+    res.json(summary);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get available GPU monitors
+app.get('/api/gpu/monitors', (req, res) => {
+  res.json({
+    platform: gpuMonitor.platform,
+    availableMonitors: gpuMonitor.availableMonitors
+  });
 });
 
 // --- Summary APIs ---
