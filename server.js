@@ -7,6 +7,9 @@ const fs = require('fs');
 const net = require('net');
 const { spawn, execSync } = require('child_process');
 const SessionManager = require('./session-manager');
+const RalphLoop = require('./ralph-loop');
+const ConversationLinker = require('./conversation-linker');
+const SummaryGenerator = require('./summary-generator');
 
 const app = express();
 const server = http.createServer(app);
@@ -113,8 +116,87 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 const sessionManager = new SessionManager();
+const ralphLoop = new RalphLoop(sessionManager);
+const conversationLinker = new ConversationLinker();
+const summaryGenerator = new SummaryGenerator();
 const terminals = new Map(); // termId -> { term, sessionName, ws }
 const activeAttachments = new Map(); // sessionName -> Set<ws>
+
+// --- Run Migrations on Startup ---
+function runMigrations() {
+  console.log('[Migrations] Running schema migrations...');
+
+  const sessions = sessionManager.list();
+  let migratedCount = 0;
+
+  for (const session of sessions) {
+    try {
+      const prd = sessionManager.loadPrd(session.name);
+      if (!prd || !prd.stories || prd.stories.length === 0) continue;
+
+      // Check if migration needed (check first story for new fields)
+      const firstStory = prd.stories[0];
+      if (firstStory.status !== undefined) continue; // Already migrated
+
+      // Migrate this session's PRD
+      sessionManager.migratePrdToNewSchema(session.name);
+      migratedCount++;
+    } catch (err) {
+      console.error(`[Migrations] Failed to migrate session "${session.name}":`, err.message);
+    }
+  }
+
+  if (migratedCount > 0) {
+    console.log(`[Migrations] Migrated ${migratedCount} session(s) to new schema`);
+  } else {
+    console.log('[Migrations] No migrations needed');
+  }
+}
+
+// Run migrations on startup
+runMigrations();
+
+// Ralph loop event handlers
+ralphLoop.on('started', ({ sessionName, state }) => {
+  broadcastLoopEvent('loop_started', sessionName, state);
+});
+
+ralphLoop.on('paused', ({ sessionName, state }) => {
+  broadcastLoopEvent('loop_paused', sessionName, state);
+});
+
+ralphLoop.on('resumed', ({ sessionName, state }) => {
+  broadcastLoopEvent('loop_resumed', sessionName, state);
+});
+
+ralphLoop.on('stopped', ({ sessionName, state }) => {
+  broadcastLoopEvent('loop_stopped', sessionName, state);
+});
+
+ralphLoop.on('complete', ({ sessionName, state }) => {
+  broadcastLoopEvent('loop_complete', sessionName, state);
+});
+
+ralphLoop.on('stuck', ({ sessionName, state, reason }) => {
+  broadcastLoopEvent('loop_stuck', sessionName, { ...state, stuckReason: reason });
+});
+
+ralphLoop.on('iteration', ({ sessionName, state, taskId, iteration }) => {
+  broadcastLoopEvent('loop_iteration', sessionName, { ...state, taskId, iteration });
+});
+
+ralphLoop.on('taskComplete', ({ sessionName, state, taskId }) => {
+  broadcastLoopEvent('task_complete', sessionName, { ...state, taskId });
+});
+
+function broadcastLoopEvent(type, sessionName, data) {
+  const payload = JSON.stringify({ type, sessionName, data, timestamp: Date.now() });
+  for (const client of statusClients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(payload);
+    }
+  }
+}
 
 // --- REST APIs ---
 
@@ -377,12 +459,964 @@ app.get('/api/stats', (req, res) => {
   });
 });
 
+// --- Scrollback APIs ---
+
+// Capture scrollback for a session
+app.post('/api/sessions/:name/capture', (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  if (!session.alive) return res.status(400).json({ error: 'Session not running' });
+
+  const result = sessionManager.captureScrollback(sessionName);
+  if (!result) return res.status(500).json({ error: 'Failed to capture scrollback' });
+
+  // Cleanup old scrollback files (keep last 20)
+  sessionManager.cleanupScrollback(sessionName, 20);
+
+  res.json(result);
+});
+
+// List scrollback history for a session
+app.get('/api/sessions/:name/scrollback', (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const history = sessionManager.getScrollbackHistory(sessionName);
+  res.json({ files: history });
+});
+
+// Get specific scrollback content
+app.get('/api/sessions/:name/scrollback/:timestamp', (req, res) => {
+  const sessionName = req.params.name;
+  const timestamp = req.params.timestamp;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const content = sessionManager.getScrollbackContent(sessionName, timestamp);
+  if (content === null) return res.status(404).json({ error: 'Scrollback not found' });
+
+  res.json({ content, timestamp });
+});
+
+// Delete specific scrollback
+app.delete('/api/sessions/:name/scrollback/:timestamp', (req, res) => {
+  const sessionName = req.params.name;
+  const timestamp = req.params.timestamp;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const deleted = sessionManager.deleteScrollback(sessionName, timestamp);
+  if (!deleted) return res.status(404).json({ error: 'Scrollback not found' });
+
+  res.json({ success: true });
+});
+
+// --- Task Tracking APIs ---
+
+// Initialize PRD with tasks
+app.post('/api/sessions/:name/prd', (req, res) => {
+  const sessionName = req.params.name;
+  const { name, description, stories } = req.body;
+
+  try {
+    const prd = sessionManager.initPrd(sessionName, name, description, stories || []);
+    res.status(201).json(prd);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Get all tasks for a session
+app.get('/api/sessions/:name/tasks', (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const tasks = sessionManager.getTasks(sessionName);
+  const stats = sessionManager.getTaskStats(sessionName);
+  res.json({ tasks, stats });
+});
+
+// Add a task
+app.post('/api/sessions/:name/tasks', (req, res) => {
+  const sessionName = req.params.name;
+  const { title, description } = req.body;
+
+  if (!title) return res.status(400).json({ error: 'title is required' });
+
+  try {
+    const task = sessionManager.addTask(sessionName, title, description || '');
+    res.status(201).json(task);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Get a specific task
+app.get('/api/sessions/:name/tasks/:taskId', (req, res) => {
+  const sessionName = req.params.name;
+  const taskId = req.params.taskId;
+
+  const task = sessionManager.getTask(sessionName, taskId);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  res.json(task);
+});
+
+// Update a task
+app.patch('/api/sessions/:name/tasks/:taskId', (req, res) => {
+  const sessionName = req.params.name;
+  const taskId = req.params.taskId;
+  const updates = req.body;
+
+  try {
+    const task = sessionManager.updateTask(sessionName, taskId, updates);
+    res.json(task);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Delete a task
+app.delete('/api/sessions/:name/tasks/:taskId', (req, res) => {
+  const sessionName = req.params.name;
+  const taskId = req.params.taskId;
+
+  try {
+    sessionManager.deleteTask(sessionName, taskId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Mark task as complete
+app.post('/api/sessions/:name/tasks/:taskId/complete', (req, res) => {
+  const sessionName = req.params.name;
+  const taskId = req.params.taskId;
+
+  try {
+    const task = sessionManager.markTaskComplete(sessionName, taskId);
+    res.json(task);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Get task stats
+app.get('/api/sessions/:name/tasks/stats', (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const stats = sessionManager.getTaskStats(sessionName);
+  res.json(stats);
+});
+
+// Get live progress for a specific task
+app.get('/api/sessions/:name/tasks/:taskId/progress', (req, res) => {
+  const sessionName = req.params.name;
+  const taskId = req.params.taskId;
+
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const task = sessionManager.getTask(sessionName, taskId);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  // Get live status from status file if available
+  const statusData = sessionManager.readStatusFile(sessionName);
+  const liveStatus = statusData && statusData.task === taskId ? {
+    currentStep: statusData.currentStep,
+    liveProgress: statusData.progress,
+    lastUpdate: statusData.timestamp,
+    source: 'status_file'
+  } : null;
+
+  // Calculate progress from steps if not in live status
+  const calculatedProgress = sessionManager.calculateTaskProgress(task);
+
+  res.json({
+    task,
+    status: task.status,
+    progress: task.progress,
+    calculatedProgress,
+    steps: task.steps,
+    liveStatus,
+    validation: task.validation
+  });
+});
+
+// Get all tasks with live status
+app.get('/api/sessions/:name/tasks/live', (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const tasks = sessionManager.getTasks(sessionName);
+  const statusData = sessionManager.readStatusFile(sessionName);
+
+  // Enrich tasks with live status
+  const tasksWithLiveStatus = tasks.map(task => {
+    const liveStatus = statusData && statusData.task === task.id ? {
+      currentStep: statusData.currentStep,
+      liveProgress: statusData.progress,
+      lastUpdate: statusData.timestamp,
+      source: 'status_file'
+    } : null;
+
+    return {
+      ...task,
+      calculatedProgress: sessionManager.calculateTaskProgress(task),
+      liveStatus
+    };
+  });
+
+  res.json({ tasks: tasksWithLiveStatus });
+});
+
+// --- Progress Tracking APIs ---
+
+// Get progress entries (parsed)
+app.get('/api/sessions/:name/progress', (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const format = req.query.format || 'parsed';
+  if (format === 'raw') {
+    const raw = sessionManager.getProgressRaw(sessionName);
+    res.type('text/plain').send(raw);
+  } else {
+    const entries = sessionManager.getProgress(sessionName);
+    res.json({ entries });
+  }
+});
+
+// Append progress entry
+app.post('/api/sessions/:name/progress', (req, res) => {
+  const sessionName = req.params.name;
+  const { content, category } = req.body;
+
+  if (!content) return res.status(400).json({ error: 'content is required' });
+
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const success = sessionManager.appendProgress(sessionName, content, category || 'info');
+  if (!success) return res.status(500).json({ error: 'Failed to append progress' });
+
+  res.status(201).json({ success: true });
+});
+
+// Clear progress
+app.delete('/api/sessions/:name/progress', (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const success = sessionManager.clearProgress(sessionName);
+  res.json({ success });
+});
+
+// --- Exit Detection APIs ---
+
+// Analyze session output for completion/stuck state
+app.get('/api/sessions/:name/analyze', (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  // Capture fresh scrollback first
+  if (session.alive) {
+    sessionManager.captureScrollback(sessionName);
+  }
+
+  const analysis = sessionManager.analyzeSessionOutput(sessionName);
+  if (!analysis) {
+    return res.status(400).json({ error: 'No output available to analyze' });
+  }
+
+  res.json(analysis);
+});
+
+// Detect completion from provided output
+app.post('/api/detect/completion', (req, res) => {
+  const { output } = req.body;
+  if (!output) return res.status(400).json({ error: 'output is required' });
+
+  const result = sessionManager.detectCompletion(output);
+  res.json(result);
+});
+
+// Detect stuck state from provided output
+app.post('/api/detect/stuck', (req, res) => {
+  const { output } = req.body;
+  if (!output) return res.status(400).json({ error: 'output is required' });
+
+  const result = sessionManager.detectStuckState(output);
+  res.json(result);
+});
+
+// --- Ralph Loop APIs ---
+
+// Start Ralph loop for a session
+app.post('/api/sessions/:name/ralph/start', async (req, res) => {
+  const sessionName = req.params.name;
+  const { maxIterations, circuitBreakerThreshold } = req.body;
+
+  try {
+    // Initialize loop state with config
+    ralphLoop.initLoopState(sessionName, {
+      maxIterations: maxIterations || 50,
+      circuitBreakerThreshold: circuitBreakerThreshold || 3
+    });
+
+    const state = await ralphLoop.startLoop(sessionName);
+    res.json(state);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Pause Ralph loop
+app.post('/api/sessions/:name/ralph/pause', (req, res) => {
+  const sessionName = req.params.name;
+
+  try {
+    const state = ralphLoop.pauseLoop(sessionName);
+    res.json(state);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Resume Ralph loop
+app.post('/api/sessions/:name/ralph/resume', async (req, res) => {
+  const sessionName = req.params.name;
+
+  try {
+    const state = await ralphLoop.resumeLoop(sessionName);
+    res.json(state);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Resume Ralph loop with verification (asks Claude if stuck task is complete)
+app.post('/api/sessions/:name/ralph/verify', async (req, res) => {
+  const sessionName = req.params.name;
+
+  try {
+    const state = await ralphLoop.resumeWithVerification(sessionName);
+    res.json({
+      ...state,
+      message: 'Verification prompt sent to Claude. System will check if task is actually complete.'
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Stop Ralph loop
+app.post('/api/sessions/:name/ralph/stop', (req, res) => {
+  const sessionName = req.params.name;
+
+  try {
+    const state = ralphLoop.stopLoop(sessionName);
+    res.json(state || { status: 'idle' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Get Ralph loop status
+app.get('/api/sessions/:name/ralph/status', (req, res) => {
+  const sessionName = req.params.name;
+
+  const state = ralphLoop.getLoopState(sessionName);
+  if (!state) {
+    return res.json({ status: 'idle', sessionName });
+  }
+
+  res.json(state);
+});
+
+// Process completion check (manually trigger analysis)
+app.post('/api/sessions/:name/ralph/check', (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  // Capture fresh scrollback and analyze
+  if (session.alive) {
+    sessionManager.captureScrollback(sessionName);
+  }
+
+  const analysis = sessionManager.analyzeSessionOutput(sessionName);
+  if (!analysis) {
+    return res.status(400).json({ error: 'No output to analyze' });
+  }
+
+  // Process the analysis through the loop
+  ralphLoop.processTaskCompletion(sessionName, analysis);
+
+  const state = ralphLoop.getLoopState(sessionName);
+  res.json({ analysis, loopState: state });
+});
+
+// Get all active loops status
+app.get('/api/ralph/status', (req, res) => {
+  const status = ralphLoop.getAllLoopStatus();
+  res.json(status);
+});
+
+// --- Checkpoint APIs ---
+
+// Create checkpoint
+app.post('/api/sessions/:name/checkpoints', (req, res) => {
+  const sessionName = req.params.name;
+  const { name, description, trigger } = req.body;
+
+  try {
+    const checkpoint = sessionManager.createCheckpoint(sessionName, name, description, trigger || 'manual');
+    res.status(201).json(checkpoint);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// List checkpoints
+app.get('/api/sessions/:name/checkpoints', (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const checkpoints = sessionManager.listCheckpoints(sessionName);
+  res.json({ checkpoints });
+});
+
+// Get specific checkpoint
+app.get('/api/sessions/:name/checkpoints/:id', (req, res) => {
+  const sessionName = req.params.name;
+  const checkpointId = req.params.id;
+
+  const checkpoint = sessionManager.getCheckpoint(sessionName, checkpointId);
+  if (!checkpoint) return res.status(404).json({ error: 'Checkpoint not found' });
+
+  res.json(checkpoint);
+});
+
+// Delete checkpoint
+app.delete('/api/sessions/:name/checkpoints/:id', (req, res) => {
+  const sessionName = req.params.name;
+  const checkpointId = req.params.id;
+
+  const deleted = sessionManager.deleteCheckpoint(sessionName, checkpointId);
+  if (!deleted) return res.status(404).json({ error: 'Checkpoint not found' });
+
+  res.json({ success: true });
+});
+
+// Restore checkpoint
+app.post('/api/sessions/:name/checkpoints/:id/restore', (req, res) => {
+  const sessionName = req.params.name;
+  const checkpointId = req.params.id;
+  const { restoreGit, force } = req.body;
+
+  try {
+    const result = sessionManager.restoreCheckpoint(sessionName, checkpointId, { restoreGit, force });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Compare checkpoints
+app.get('/api/sessions/:name/checkpoints/compare', (req, res) => {
+  const sessionName = req.params.name;
+  const { from, to } = req.query;
+
+  if (!from || !to) {
+    return res.status(400).json({ error: 'from and to checkpoint IDs required' });
+  }
+
+  try {
+    const comparison = sessionManager.compareCheckpoints(sessionName, from, to);
+    res.json(comparison);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// --- Conversation Linking APIs ---
+
+// Get conversation for a session (links to Claude logs via project path)
+app.get('/api/sessions/:name/conversation', (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const limit = parseInt(req.query.limit) || 50;
+  const sessionId = req.query.sessionId;
+  const includeToolCalls = req.query.includeToolCalls !== 'false';
+
+  const result = conversationLinker.getConversationForSession(session.projectPath, {
+    limit,
+    sessionId,
+    includeToolCalls
+  });
+
+  if (!result.found) {
+    return res.status(404).json({ error: result.error });
+  }
+
+  res.json(result);
+});
+
+// Get conversation summary for a session
+app.get('/api/sessions/:name/conversation/summary', (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const summary = conversationLinker.getConversationSummary(session.projectPath);
+  if (!summary) {
+    return res.status(404).json({ error: 'No conversation found for this project' });
+  }
+
+  res.json(summary);
+});
+
+// List available Claude sessions for a project
+app.get('/api/sessions/:name/conversation/sessions', (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const sessions = conversationLinker.getSessions(session.projectPath);
+  res.json({ sessions });
+});
+
+// --- Cross-Session Memory APIs ---
+
+// Get all memory
+app.get('/api/memory', (req, res) => {
+  const memory = sessionManager.getMemory();
+  res.json(memory);
+});
+
+// Get relevant memories for a project type or tags
+app.get('/api/memory/relevant', (req, res) => {
+  const { projectType, tags, limit } = req.query;
+  const tagList = tags ? tags.split(',') : [];
+  const limitNum = parseInt(limit) || 10;
+
+  const memories = sessionManager.getRelevantMemories(projectType, tagList, limitNum);
+  res.json({ memories });
+});
+
+// Add a memory entry manually
+app.post('/api/memory', (req, res) => {
+  const { type, content, source, tags, projectType } = req.body;
+
+  if (!content) {
+    return res.status(400).json({ error: 'content is required' });
+  }
+
+  const entry = sessionManager.addMemoryEntry({
+    type: type || 'learning',
+    content,
+    source: source || 'manual',
+    tags: tags || [],
+    projectType
+  });
+
+  res.status(201).json(entry);
+});
+
+// Aggregate memories from all sessions
+app.post('/api/memory/aggregate', (req, res) => {
+  try {
+    const result = sessionManager.aggregateMemories();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Clear all memory (for testing/reset)
+app.delete('/api/memory', (req, res) => {
+  const { confirm } = req.body;
+
+  if (confirm !== 'DELETE_ALL_MEMORY') {
+    return res.status(400).json({ error: 'Confirmation required: set confirm to "DELETE_ALL_MEMORY"' });
+  }
+
+  const result = sessionManager.clearMemory();
+  res.json({ success: true, memory: result });
+});
+
+// Get memory patterns and preferences
+app.get('/api/memory/patterns', (req, res) => {
+  const memory = sessionManager.getMemory();
+  res.json({
+    patterns: memory.patterns || [],
+    techPreferences: memory.techPreferences || {},
+    commonErrors: memory.commonErrors || [],
+    lastUpdated: memory.lastUpdated
+  });
+});
+
+// Extract memories from a specific session
+app.post('/api/sessions/:name/memory/extract', (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const extracted = sessionManager.extractMemoryFromProgress(sessionName);
+
+  // Optionally add to global memory
+  const { addToGlobal } = req.body;
+  let added = 0;
+
+  if (addToGlobal) {
+    const memory = sessionManager.loadMemory();
+    for (const entry of extracted) {
+      // Check for duplicates
+      const isDuplicate = memory.entries.some(e =>
+        e.source === entry.source &&
+        e.content.substring(0, 100) === entry.content.substring(0, 100)
+      );
+
+      if (!isDuplicate) {
+        sessionManager.addMemoryEntry(entry);
+        added++;
+      }
+    }
+  }
+
+  res.json({
+    extracted,
+    count: extracted.length,
+    addedToGlobal: added
+  });
+});
+
+// --- Settings APIs ---
+
+// Get all settings
+app.get('/api/settings', (req, res) => {
+  const settings = summaryGenerator.getSettings();
+  // Don't expose full API key
+  const safeSettings = { ...settings };
+  if (safeSettings.ai?.apiKey) {
+    safeSettings.ai = {
+      ...safeSettings.ai,
+      apiKey: safeSettings.ai.apiKey.substring(0, 8) + '...'
+    };
+  }
+  res.json(safeSettings);
+});
+
+// Update settings
+app.patch('/api/settings', (req, res) => {
+  const updates = req.body;
+  const settings = summaryGenerator.updateSettings(updates);
+  // Don't expose full API key
+  const safeSettings = { ...settings };
+  if (safeSettings.ai?.apiKey) {
+    safeSettings.ai = {
+      ...safeSettings.ai,
+      apiKey: safeSettings.ai.apiKey.substring(0, 8) + '...'
+    };
+  }
+  res.json(safeSettings);
+});
+
+// Test API connection
+app.post('/api/settings/test', async (req, res) => {
+  const result = await summaryGenerator.testConnection();
+  res.json(result);
+});
+
+// --- Summary APIs ---
+
+// Generate summary for a session
+app.post('/api/sessions/:name/summary', async (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  if (!summaryGenerator.isConfigured()) {
+    return res.status(400).json({ error: 'AI API not configured. Set baseUrl and apiKey in settings.' });
+  }
+
+  // Gather session data
+  const scrollback = sessionManager.getScrollbackContent(sessionName, 'latest');
+  const tasks = sessionManager.getTaskStats(sessionName);
+  const conversationResult = conversationLinker.getConversationForSession(session.projectPath, { limit: 10 });
+
+  const sessionData = {
+    sessionName,
+    projectName: session.projectPath.split('/').pop(),
+    scrollback,
+    tasks,
+    conversation: conversationResult.found ? conversationResult.messages : []
+  };
+
+  const result = await summaryGenerator.generateSessionSummary(sessionData);
+
+  if (!result.success) {
+    return res.status(500).json({ error: result.error });
+  }
+
+  // Store summary in session metadata
+  const meta = sessionManager.data.sessions[sessionName];
+  if (meta) {
+    meta.lastSummary = {
+      content: result.summary,
+      timestamp: result.timestamp
+    };
+    sessionManager.save();
+  }
+
+  res.json(result);
+});
+
+// Generate summary for a checkpoint
+app.post('/api/sessions/:name/checkpoints/:id/summary', async (req, res) => {
+  const sessionName = req.params.name;
+  const checkpointId = req.params.id;
+
+  if (!summaryGenerator.isConfigured()) {
+    return res.status(400).json({ error: 'AI API not configured' });
+  }
+
+  const checkpoint = sessionManager.getCheckpoint(sessionName, checkpointId);
+  if (!checkpoint) return res.status(404).json({ error: 'Checkpoint not found' });
+
+  // Get scrollback at checkpoint time if available
+  let scrollback = '';
+  if (checkpoint.scrollback?.timestamp) {
+    scrollback = sessionManager.getScrollbackContent(sessionName, checkpoint.scrollback.timestamp) || '';
+  }
+
+  const result = await summaryGenerator.generateCheckpointSummary({
+    name: checkpoint.name,
+    tasks: checkpoint.tasks,
+    git: checkpoint.git,
+    scrollback
+  });
+
+  if (!result.success) {
+    return res.status(500).json({ error: result.error });
+  }
+
+  // Update checkpoint with summary
+  const checkpointsDir = sessionManager.getCheckpointsDir(sessionName);
+  const checkpointPath = path.join(checkpointsDir, `${checkpointId}.json`);
+  checkpoint.summary = result.summary;
+  fs.writeFileSync(checkpointPath, JSON.stringify(checkpoint, null, 2));
+
+  res.json(result);
+});
+
+// --- Auto-capture scrollback for active sessions ---
+
+const lastScrollbackCapture = new Map(); // sessionName -> timestamp
+const SCROLLBACK_CAPTURE_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+function autoCapureScrollback() {
+  const sessions = sessionManager.list();
+  const now = Date.now();
+
+  for (const session of sessions) {
+    if (!session.alive) continue;
+
+    const lastCapture = lastScrollbackCapture.get(session.name) || 0;
+    if (now - lastCapture >= SCROLLBACK_CAPTURE_INTERVAL) {
+      const result = sessionManager.captureScrollback(session.name);
+      if (result) {
+        lastScrollbackCapture.set(session.name, now);
+        // Cleanup old captures (keep last 20)
+        sessionManager.cleanupScrollback(session.name, 20);
+      }
+    }
+  }
+}
+
+// Run auto-capture check every minute
+setInterval(autoCapureScrollback, 60 * 1000);
+
+// --- Ralph Loop: Automatic completion detection ---
+
+function checkRalphLoopCompletion() {
+  const allLoops = ralphLoop.getAllLoopStatus();
+
+  for (const [sessionName, loopStatus] of Object.entries(allLoops)) {
+    if (loopStatus.status !== 'running') continue;
+
+    const session = sessionManager.get(sessionName);
+    if (!session || !session.alive) continue;
+
+    const currentTask = sessionManager.getCurrentTask(sessionName);
+    if (!currentTask) continue;
+
+    let analysis = null;
+    let validationResult = null;
+
+    // PRIMARY: Check status file first (most reliable)
+    const statusData = sessionManager.readStatusFile(sessionName);
+
+    if (statusData) {
+      // Run 4-layer validation
+      validationResult = sessionManager.validateTaskCompletion(
+        sessionName,
+        currentTask.id,
+        statusData
+      );
+
+      console.log(`[Ralph] Status file validation for ${sessionName}:`, {
+        passed: validationResult.passed,
+        status: statusData.status,
+        progress: statusData.progress,
+        layers: Object.entries(validationResult.layers).map(([k, v]) => `${k}:${v.valid}`).join(', ')
+      });
+
+      // Update task with status file data (even if validation incomplete)
+      if (validationResult.layers.schema.valid) {
+        const updates = {
+          lastUpdatedAt: new Date().toISOString()
+        };
+
+        // Update status
+        if (statusData.status) {
+          updates.status = statusData.status;
+        }
+
+        // Update progress
+        if (statusData.progress !== undefined) {
+          updates.progress = statusData.progress;
+        }
+
+        // Update Claude task ID if provided
+        if (statusData.claudeTaskId) {
+          updates.claudeTaskId = statusData.claudeTaskId;
+        }
+
+        // Update current step
+        if (statusData.currentStep && currentTask.steps) {
+          const stepMatch = currentTask.steps.find(s =>
+            statusData.currentStep.toLowerCase().includes(s.name)
+          );
+          if (stepMatch && stepMatch.status === 'pending') {
+            stepMatch.status = 'in_progress';
+            updates.steps = currentTask.steps;
+          }
+        }
+
+        // Store validation results
+        updates.validation = {
+          syntaxValid: validationResult.layers.syntax.valid,
+          schemaValid: validationResult.layers.schema.valid,
+          semanticValid: validationResult.layers.semantic.valid,
+          outcomeValid: validationResult.layers.outcome.valid,
+          errors: [
+            ...validationResult.layers.schema.errors,
+            ...validationResult.layers.semantic.errors,
+            ...validationResult.layers.outcome.errors
+          ]
+        };
+
+        try {
+          sessionManager.updateTask(sessionName, currentTask.id, updates);
+        } catch (err) {
+          console.error(`[Ralph] Failed to update task: ${err.message}`);
+        }
+
+        // Broadcast progress update to clients
+        broadcastLoopEvent('task_progress', sessionName, {
+          taskId: currentTask.id,
+          status: statusData.status,
+          progress: statusData.progress,
+          currentStep: statusData.currentStep
+        });
+      }
+
+      // If validation passed completely, mark as complete
+      if (validationResult.passed && statusData.status === 'completed') {
+        analysis = {
+          completion: {
+            isComplete: true,
+            source: 'status_file',
+            statusFile: statusData
+          },
+          stuck: { isStuck: false },
+          validation: validationResult
+        };
+      } else if (statusData.status === 'error') {
+        // Handle error status
+        analysis = {
+          completion: { isComplete: false, source: 'status_file' },
+          stuck: {
+            isStuck: true,
+            errorCount: 1,
+            errors: [{ type: 'task_error', message: statusData.error || 'Unknown error' }]
+          }
+        };
+      }
+    }
+
+    // FALLBACK: Terminal scraping if no status file or validation failed
+    if (!analysis) {
+      sessionManager.captureScrollback(sessionName);
+      analysis = sessionManager.analyzeSessionOutput(sessionName);
+      if (!analysis) continue;
+
+      console.log(`[Ralph] Terminal scraping for ${sessionName}: complete=${analysis.completion?.isComplete}, stuck=${analysis.stuck?.isStuck}`);
+    }
+
+    const isComplete = analysis.completion?.isComplete;
+    const isStuck = analysis.stuck?.isStuck;
+
+    // Process completion or stuck state
+    if (isComplete || isStuck) {
+      ralphLoop.processTaskCompletion(sessionName, analysis);
+
+      // Clear status file after processing
+      if (statusData) {
+        sessionManager.clearStatusFile(sessionName);
+        console.log(`[Ralph] Cleared status file for ${sessionName}`);
+      }
+
+      // Broadcast final update
+      broadcastLoopEvent('ralph_update', sessionName, {
+        analysis,
+        loopState: ralphLoop.getLoopState(sessionName)
+      });
+    }
+  }
+}
+
+// Check Ralph loops every 5 seconds (faster polling for file-based detection)
+setInterval(checkRalphLoopCompletion, 5 * 1000);
+
 // --- WebSocket: status push ---
 
 const statusClients = new Set();
 
 function getStatusPayload() {
-  const sessions = sessionManager.list();
+  const sessions = sessionManager.list().map(s => {
+    // Add task stats to each session
+    const taskStats = sessionManager.getTaskStats(s.name);
+    return {
+      ...s,
+      tasks: taskStats.total > 0 ? taskStats : undefined
+    };
+  });
   const running = sessions.filter(s => s.alive).length;
   return {
     type: 'status',
