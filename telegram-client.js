@@ -348,23 +348,45 @@ class TelegramClient extends EventEmitter {
 
 🎯 What I can do:
 • Create and manage AI coding sessions
-• Start autonomous Ralph loops
-• Monitor task progress & logs
-• Track GPU usage in real-time
+• Start autonomous Ralph loops that run 24/7
+• Monitor task progress & logs in real-time
+• Track GPU usage and system resources
 • Send notifications when tasks complete
+• Execute tasks in the background while you sleep!
 
-✨ Run tasks while you sleep!
-Start a Ralph loop and I'll notify you when done.
-No need to stay connected - everything runs in the background.
+✨ Background Execution:
+Start a Ralph loop and close this app - tasks continue running!
+I'll notify you when:
+  ✅ Tasks complete
+  ⚠️ Tasks get stuck
+  🎉 Ralph finishes all work
 
-📚 Quick Start:
-/create my-project - Create a new session
-/task my-project <description> - Add a task
-/ralph start my-project - Start autonomous loop
-/status - Check all sessions
-/gpu - Show GPU stats
-/logs my-project - View session logs
-/help - Show all commands
+📚 Essential Commands:
+Session Management:
+/create <name> - Create new session
+/start <name> - Start session
+/stop <name> - Stop session
+/status [name] - Check session status
+/list - List all sessions
+
+Task Management:
+/task <session> <description> - Add task
+/tasks <session> - View all tasks
+/progress <session> - Current task progress
+
+Ralph Control (Autonomous Loop):
+/ralph start <session> - Start autonomous loop
+/ralph pause <session> - Pause loop
+/ralph resume <session> - Resume loop
+/ralph stop <session> - Stop loop
+
+Monitoring:
+/logs <session> [lines] - View session logs
+/gpu - Show GPU statistics
+/attach <session> - Get terminal link
+/code <session> - Get VS Code link
+
+/help - Show detailed command help
 
 🌐 Dashboard: http://localhost:3131`;
 
