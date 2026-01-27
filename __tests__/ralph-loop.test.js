@@ -34,6 +34,7 @@ const createMockSessionManager = () => ({
   logError: jest.fn(),
   clearStatusFile: jest.fn(),
   captureScrollback: jest.fn(),
+  analyzeSessionOutput: jest.fn(),
   stop: jest.fn(),
   revive: jest.fn(),
   save: jest.fn(),
@@ -1038,6 +1039,123 @@ describe('RalphLoop', () => {
       jest.advanceTimersByTime(1000);
 
       await promise;
+    });
+  });
+
+  describe('processTaskCompletion()', () => {
+    it('should return null if no loop state', async () => {
+      const result = await loop.processTaskCompletion('nonexistent', { completion: { isComplete: true } });
+      expect(result).toBeNull();
+    });
+
+    it('should call handleTaskComplete when complete', async () => {
+      mockSessionManager.get.mockReturnValue({ name: 'test-session', projectPath: '/test' });
+      mockSessionManager.getCurrentTask.mockReturnValue({ id: 'task-1', title: 'Test' });
+      mockSessionManager.markTaskComplete.mockReturnValue(true);
+      mockSessionManager.logTaskComplete.mockReturnValue(true);
+      mockSessionManager.clearStatusFile.mockReturnValue(true);
+
+      loop.initLoopState('test-session', {});
+
+      const analysis = {
+        completion: { isComplete: true, confidence: 0.9, indicators: ['DONE found'] }
+      };
+
+      const result = await loop.processTaskCompletion('test-session', analysis);
+
+      expect(result.processed).toBe(true);
+      expect(result.action).toBe('complete');
+    });
+
+    it('should call handleTaskStuck when stuck', async () => {
+      mockSessionManager.get.mockReturnValue({ name: 'test-session', projectPath: '/test' });
+      mockSessionManager.getCurrentTask.mockReturnValue({ id: 'task-1', title: 'Test' });
+
+      loop.initLoopState('test-session', {});
+
+      const analysis = {
+        completion: { isComplete: false },
+        stuck: { isStuck: true, indicators: ['No progress'] }
+      };
+
+      const result = await loop.processTaskCompletion('test-session', analysis);
+
+      expect(result.processed).toBe(true);
+      expect(result.action).toBe('stuck');
+    });
+  });
+
+  describe('checkTaskCompletion()', () => {
+    it('should return error if session not found', async () => {
+      mockSessionManager.get.mockReturnValue(null);
+
+      const result = await loop.checkTaskCompletion('nonexistent');
+
+      expect(result.error).toBe('Session not found');
+    });
+
+    it('should return status file data when present', async () => {
+      mockSessionManager.get.mockReturnValue({ name: 'test-session', projectPath: '/test', alive: false });
+      mockSessionManager.getCurrentTask.mockReturnValue({ id: 'task-1', title: 'Test Task' });
+
+      fs.existsSync.mockReturnValue(true);
+      fs.readFileSync.mockReturnValue(JSON.stringify({
+        status: 'completed',
+        progress: 100,
+        result: { message: 'Done' }
+      }));
+
+      const result = await loop.checkTaskCompletion('test-session');
+
+      expect(result.source).toBe('status_file');
+      expect(result.status).toBe('completed');
+      expect(result.isComplete).toBe(true);
+    });
+
+    it('should fall back to terminal analysis when no status file', async () => {
+      mockSessionManager.get.mockReturnValue({ name: 'test-session', projectPath: '/test', alive: true });
+      mockSessionManager.getCurrentTask.mockReturnValue({ id: 'task-1', title: 'Test Task' });
+      mockSessionManager.captureScrollback.mockReturnValue();
+      mockSessionManager.analyzeSessionOutput.mockReturnValue({
+        completion: { isComplete: false, confidence: 0.5, indicators: [] },
+        stuck: { isStuck: false, indicators: [] }
+      });
+
+      fs.existsSync.mockReturnValue(false);
+
+      const result = await loop.checkTaskCompletion('test-session');
+
+      expect(result.source).toBe('terminal');
+      expect(result.isComplete).toBe(false);
+    });
+  });
+
+  describe('resumeWithVerification()', () => {
+    it('should throw if no loop state', async () => {
+      await expect(loop.resumeWithVerification('nonexistent'))
+        .rejects.toThrow('No Ralph state found');
+    });
+
+    it('should process completion if task is complete', async () => {
+      mockSessionManager.get.mockReturnValue({ name: 'test-session', projectPath: '/test', alive: true });
+      mockSessionManager.getCurrentTask.mockReturnValue({ id: 'task-1', title: 'Test' });
+      mockSessionManager.markTaskComplete.mockReturnValue(true);
+      mockSessionManager.logTaskComplete.mockReturnValue(true);
+      mockSessionManager.clearStatusFile.mockReturnValue(true);
+
+      fs.existsSync.mockReturnValue(true);
+      fs.readFileSync.mockReturnValue(JSON.stringify({
+        status: 'completed',
+        progress: 100,
+        result: { message: 'Done' }
+      }));
+
+      loop.initLoopState('test-session', {});
+
+      const result = await loop.resumeWithVerification('test-session');
+
+      expect(result.verified).toBe(true);
+      expect(result.action).toBe('completed');
     });
   });
 });

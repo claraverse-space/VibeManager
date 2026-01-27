@@ -3485,21 +3485,24 @@
       badge.textContent = ralphStatus.toUpperCase();
       badge.className = `ralph-status-badge ${ralphStatus}`;
 
-      // Update Ralph controls
+      // Update Ralph controls - Note: innerHTML is safe here as all values are hardcoded strings
       const controls = document.getElementById('ralph-controls');
       if (ralphStatus === 'running') {
         controls.innerHTML = `
+          <button class="btn-pause" onclick="checkTaskCompletion()" style="background: var(--accent);">Check</button>
           <button class="btn-pause" onclick="pauseRalph()">Pause</button>
           <button class="btn-stop" onclick="stopRalph()">Stop</button>
         `;
       } else if (ralphStatus === 'stuck') {
         controls.innerHTML = `
-          <button class="btn-start" onclick="resumeWithVerification()" style="background: var(--accent);">Verify & Resume</button>
+          <button class="btn-pause" onclick="checkTaskCompletion()" style="background: var(--accent);">Check</button>
+          <button class="btn-start" onclick="resumeWithVerification()">Verify & Resume</button>
           <button class="btn-start" onclick="resumeRalph()">Force Resume</button>
           <button class="btn-stop" onclick="stopRalph()">Stop</button>
         `;
       } else if (ralphStatus === 'paused') {
         controls.innerHTML = `
+          <button class="btn-pause" onclick="checkTaskCompletion()" style="background: var(--accent);">Check</button>
           <button class="btn-start" onclick="resumeRalph()">Resume</button>
           <button class="btn-stop" onclick="stopRalph()">Stop</button>
         `;
@@ -3720,6 +3723,59 @@
         });
         await refreshTasksModal();
         showToast('Ralph stopped');
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    async function checkTaskCompletion() {
+      if (!currentTasksSession) return;
+
+      try {
+        const response = await fetch(`/api/sessions/${encodeURIComponent(currentTasksSession)}/ralph/check`, {
+          method: 'POST'
+        });
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to check task');
+        }
+
+        await refreshTasksModal();
+
+        // Show check result
+        const status = result.isComplete ? 'COMPLETE' :
+                      result.isStuck ? 'STUCK' :
+                      result.error ? 'ERROR' : 'IN PROGRESS';
+        const message = result.message || result.indicators?.join(', ') || 'No details';
+        showToast(`Task: ${status} - ${message}`, status === 'COMPLETE' ? 3000 : 2000);
+
+        // If complete, offer to mark it
+        if (result.isComplete) {
+          if (confirm('Task appears complete. Mark it as done and move to next task?')) {
+            await forceCompleteTask();
+          }
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    async function forceCompleteTask() {
+      if (!currentTasksSession) return;
+
+      try {
+        const response = await fetch(`/api/sessions/${encodeURIComponent(currentTasksSession)}/ralph/complete`, {
+          method: 'POST'
+        });
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to complete task');
+        }
+
+        await refreshTasksModal();
+        showToast('Task marked complete!');
       } catch (err) {
         alert('Error: ' + err.message);
       }

@@ -1027,6 +1027,175 @@ Reply with JSON:
     console.log('[Ralph] Monitor settings updated:', this.monitorSettings);
   }
 
+  /**
+   * Process task completion from external analysis
+   * Called by server.js polling and manual check endpoints
+   */
+  async processTaskCompletion(sessionName, analysis) {
+    const state = this.getLoopState(sessionName);
+    if (!state) {
+      console.log(`[Ralph] processTaskCompletion: No loop state for ${sessionName}`);
+      return null;
+    }
+
+    const session = this.sessionManager.get(sessionName);
+    if (!session) return null;
+
+    const currentTask = this.sessionManager.getCurrentTask(sessionName);
+
+    const isComplete = analysis.completion?.isComplete;
+    const isStuck = analysis.stuck?.isStuck;
+
+    if (isComplete) {
+      console.log(`[Ralph] processTaskCompletion: Task complete for ${sessionName}`);
+
+      // Build analysis object for handleTaskComplete
+      const taskAnalysis = {
+        status: 'completed',
+        confidence: analysis.completion?.confidence || 0.8,
+        reason: analysis.completion?.indicators?.join(', ') || 'Task completed',
+        hasProgress: true
+      };
+
+      if (currentTask) {
+        await this.handleTaskComplete(sessionName, currentTask, taskAnalysis);
+      } else {
+        // No specific task, mark loop complete
+        this.handleAllTasksComplete(sessionName);
+      }
+
+      return { processed: true, action: 'complete', task: currentTask };
+    }
+
+    if (isStuck) {
+      console.log(`[Ralph] processTaskCompletion: Task stuck for ${sessionName}`);
+
+      const stuckReason = analysis.stuck?.indicators?.join(', ') || 'No progress detected';
+
+      if (currentTask) {
+        this.handleTaskStuck(sessionName, currentTask, stuckReason);
+      }
+
+      return { processed: true, action: 'stuck', reason: stuckReason };
+    }
+
+    // Not complete or stuck, just update progress
+    if (analysis.completion?.indicators?.length > 0) {
+      // Update watcher to show activity
+      const watcher = this.watchers.get(sessionName);
+      if (watcher) {
+        watcher.lastActivityAt = Date.now();
+        watcher.noProgressCount = 0;
+      }
+    }
+
+    return { processed: false, action: 'progress' };
+  }
+
+  /**
+   * Check task completion manually
+   * Returns the analysis result without processing
+   */
+  async checkTaskCompletion(sessionName) {
+    const session = this.sessionManager.get(sessionName);
+    if (!session) {
+      return { error: 'Session not found' };
+    }
+
+    const state = this.getLoopState(sessionName);
+    const currentTask = this.sessionManager.getCurrentTask(sessionName);
+
+    // Capture fresh scrollback
+    if (session.alive) {
+      this.sessionManager.captureScrollback(sessionName);
+    }
+
+    // Check status file first
+    const statusData = this.getStatusFileContent(sessionName);
+    if (statusData && statusData.status) {
+      const statusResult = {
+        source: 'status_file',
+        status: statusData.status,
+        progress: statusData.progress || 0,
+        message: statusData.result?.message || statusData.currentStep,
+        task: currentTask,
+        loopState: state ? {
+          status: state.status,
+          iterationCount: state.iterationCount,
+          currentTaskId: state.currentTaskId
+        } : null
+      };
+
+      // If status file shows completed, process it
+      if (statusData.status === 'completed') {
+        statusResult.isComplete = true;
+      } else if (statusData.status === 'error' || statusData.status === 'blocked') {
+        statusResult.isStuck = true;
+      }
+
+      return statusResult;
+    }
+
+    // Fall back to terminal analysis
+    const analysis = this.sessionManager.analyzeSessionOutput(sessionName);
+    if (!analysis) {
+      return {
+        source: 'none',
+        error: 'No output to analyze',
+        task: currentTask,
+        loopState: state ? { status: state.status } : null
+      };
+    }
+
+    return {
+      source: 'terminal',
+      isComplete: analysis.completion?.isComplete || false,
+      isStuck: analysis.stuck?.isStuck || false,
+      confidence: analysis.completion?.confidence || 0,
+      indicators: analysis.completion?.indicators || [],
+      stuckIndicators: analysis.stuck?.indicators || [],
+      task: currentTask,
+      loopState: state ? {
+        status: state.status,
+        iterationCount: state.iterationCount,
+        currentTaskId: state.currentTaskId
+      } : null
+    };
+  }
+
+  /**
+   * Resume with verification - verify task completion before resuming
+   */
+  async resumeWithVerification(sessionName) {
+    const state = this.getLoopState(sessionName);
+    if (!state) {
+      throw new Error('No Ralph state found');
+    }
+
+    console.log(`[Ralph] Verifying task completion for ${sessionName}`);
+
+    // Check current task status
+    const checkResult = await this.checkTaskCompletion(sessionName);
+
+    if (checkResult.isComplete) {
+      // Task is actually complete, process and move to next
+      const analysis = {
+        completion: { isComplete: true, confidence: 0.9, indicators: checkResult.indicators || ['Verified as complete'] }
+      };
+      await this.processTaskCompletion(sessionName, analysis);
+      return { verified: true, action: 'completed', result: checkResult };
+    }
+
+    if (checkResult.isStuck) {
+      // Still stuck, keep paused
+      return { verified: true, action: 'still_stuck', result: checkResult };
+    }
+
+    // Not stuck or complete, resume normally
+    await this.resumeLoop(sessionName);
+    return { verified: true, action: 'resumed', result: checkResult };
+  }
+
   // Legacy compatibility
   startLogDetection(sessionName) { this.startMonitoring(sessionName); }
   stopLogDetection(sessionName) { this.stopMonitoring(sessionName); }

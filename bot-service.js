@@ -541,13 +541,73 @@ class BotService extends EventEmitter {
         };
         break;
 
+      case 'check':
+        const checkResult = await this.ralphLoop.checkTaskCompletion(session);
+        const checkStatus = checkResult.isComplete ? 'COMPLETE' :
+                           checkResult.isStuck ? 'STUCK' :
+                           checkResult.error ? 'ERROR' : 'IN PROGRESS';
+        const checkSource = checkResult.source || 'unknown';
+        const checkTask = checkResult.task ? checkResult.task.title : 'No active task';
+
+        let checkText = `[RALPH] Task Check\n\n`;
+        checkText += `Status: ${checkStatus}\n`;
+        checkText += `Task: ${checkTask}\n`;
+        checkText += `Source: ${checkSource}\n`;
+
+        if (checkResult.progress !== undefined) {
+          checkText += `Progress: ${checkResult.progress}%\n`;
+        }
+        if (checkResult.message) {
+          checkText += `Message: ${checkResult.message}\n`;
+        }
+        if (checkResult.indicators?.length > 0) {
+          checkText += `Indicators: ${checkResult.indicators.slice(0, 3).join(', ')}\n`;
+        }
+        if (checkResult.loopState) {
+          checkText += `Loop: ${checkResult.loopState.status} (iter ${checkResult.loopState.iterationCount || 0})\n`;
+        }
+
+        const checkButtons = [];
+        if (checkResult.isComplete) {
+          checkButtons.push({ id: `ralph_complete:${session}`, label: '[Mark Complete]' });
+        }
+        if (checkResult.isStuck) {
+          checkButtons.push({ id: `ralph_resume:${session}`, label: '[Resume]' });
+        }
+        checkButtons.push({ id: `ralph_check:${session}`, label: '[Check Again]' });
+        checkButtons.push({ id: `status:${session}`, label: '[Status]' });
+
+        result = { text: checkText, buttons: checkButtons };
+        break;
+
       case 'verify':
-        await this.ralphLoop.resumeWithVerification(session);
+        const verifyResult = await this.ralphLoop.resumeWithVerification(session);
+        let verifyText = `[RALPH] Verification Complete\n\n`;
+        verifyText += `Action: ${verifyResult.action}\n`;
+        if (verifyResult.result?.task) {
+          verifyText += `Task: ${verifyResult.result.task.title}\n`;
+        }
+
+        const verifyButtons = verifyResult.action === 'completed' ?
+          [{ id: `progress:${session}`, label: '[Progress]' }, { id: `status:${session}`, label: '[Status]' }] :
+          verifyResult.action === 'still_stuck' ?
+          [{ id: `ralph_resume:${session}`, label: '[Force Resume]' }, { id: `ralph_check:${session}`, label: '[Check]' }] :
+          [{ id: `ralph_pause:${session}`, label: '[Pause]' }, { id: `progress:${session}`, label: '[Progress]' }];
+
+        result = { text: verifyText, buttons: verifyButtons };
+        break;
+
+      case 'complete':
+        // Force mark current task as complete
+        const forceAnalysis = {
+          completion: { isComplete: true, confidence: 1.0, indicators: ['Manually marked complete'] }
+        };
+        const forceResult = await this.ralphLoop.processTaskCompletion(session, forceAnalysis);
         result = {
-          text: `[RALPH] Verification Started\n\nAsking Claude if the task is actually complete...`,
+          text: `[RALPH] Task Marked Complete\n\n${forceResult?.task?.title || 'Task'} marked as complete.`,
           buttons: [
             { id: `progress:${session}`, label: '[Progress]' },
-            { id: `ralph_stop:${session}`, label: '[Stop]' }
+            { id: `status:${session}`, label: '[Status]' }
           ]
         };
         break;

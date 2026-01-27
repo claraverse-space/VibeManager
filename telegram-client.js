@@ -309,6 +309,34 @@ Dashboard: http://localhost:3131`;
           );
           break;
 
+        case 'ralph_stop':
+          result = await this.botService.handleCommand(
+            { command: 'ralph', subcommand: 'stop', params: { session: sessionName } },
+            { platform: 'telegram', userId }
+          );
+          break;
+
+        case 'ralph_check':
+          result = await this.botService.handleCommand(
+            { command: 'ralph', subcommand: 'check', params: { session: sessionName } },
+            { platform: 'telegram', userId }
+          );
+          break;
+
+        case 'ralph_complete':
+          result = await this.botService.handleCommand(
+            { command: 'ralph', subcommand: 'complete', params: { session: sessionName } },
+            { platform: 'telegram', userId }
+          );
+          break;
+
+        case 'ralph_verify':
+          result = await this.botService.handleCommand(
+            { command: 'ralph', subcommand: 'verify', params: { session: sessionName } },
+            { platform: 'telegram', userId }
+          );
+          break;
+
         default:
           await ctx.answerCbQuery('Unknown action');
           return;

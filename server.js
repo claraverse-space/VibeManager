@@ -870,27 +870,35 @@ app.get('/api/sessions/:name/ralph/status', (req, res) => {
   res.json(state);
 });
 
-// Process completion check (manually trigger analysis)
-app.post('/api/sessions/:name/ralph/check', (req, res) => {
+// Check task completion status (without processing)
+app.post('/api/sessions/:name/ralph/check', async (req, res) => {
   const sessionName = req.params.name;
   const session = sessionManager.get(sessionName);
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
-  // Capture fresh scrollback and analyze
-  if (session.alive) {
-    sessionManager.captureScrollback(sessionName);
+  try {
+    const result = await ralphLoop.checkTaskCompletion(sessionName);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
+});
 
-  const analysis = sessionManager.analyzeSessionOutput(sessionName);
-  if (!analysis) {
-    return res.status(400).json({ error: 'No output to analyze' });
+// Force mark current task as complete
+app.post('/api/sessions/:name/ralph/complete', async (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  try {
+    const analysis = {
+      completion: { isComplete: true, confidence: 1.0, indicators: ['Manually marked complete'] }
+    };
+    const result = await ralphLoop.processTaskCompletion(sessionName, analysis);
+    res.json(result || { processed: true, action: 'complete' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
-
-  // Process the analysis through the loop
-  ralphLoop.processTaskCompletion(sessionName, analysis);
-
-  const state = ralphLoop.getLoopState(sessionName);
-  res.json({ analysis, loopState: state });
 });
 
 // Get all active loops status

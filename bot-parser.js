@@ -25,7 +25,9 @@ class BotParser {
           pause: { params: ['session'], description: 'Pause Ralph loop' },
           resume: { params: ['session'], description: 'Resume Ralph loop' },
           stop: { params: ['session'], description: 'Stop Ralph loop' },
-          verify: { params: ['session'], description: 'Verify stuck task' }
+          check: { params: ['session'], description: 'Check task completion' },
+          verify: { params: ['session'], description: 'Verify stuck task' },
+          complete: { params: ['session'], description: 'Force mark task complete' }
         }
       },
 
