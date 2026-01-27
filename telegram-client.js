@@ -1,11 +1,6 @@
-// telegram-client.js - Robust Telegram bot client with auto-reconnection
+// telegram-client.js - Simple Telegram bot client
 const { Telegraf, Markup } = require('telegraf');
 const EventEmitter = require('events');
-const https = require('https');
-const dns = require('dns');
-
-// Force IPv4 DNS resolution globally
-dns.setDefaultResultOrder('ipv4first');
 
 class TelegramClient extends EventEmitter {
   constructor(config, botService) {
@@ -14,54 +9,18 @@ class TelegramClient extends EventEmitter {
     this.botService = botService;
     this.bot = null;
     this.ready = false;
-    this.connecting = false;
-
-    // Reconnection state
-    this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = Infinity; // Never stop trying
-    this.reconnectDelay = 1000; // Start with 1 second
-    this.maxReconnectDelay = 60000; // Max 1 minute
-    this.reconnectTimer = null;
-
-    // Health monitoring
-    this.lastHealthCheck = Date.now();
-    this.healthCheckInterval = null;
-    this.healthCheckTimeout = 30000; // 30 seconds
-
-    // Connection state
-    this.connectionState = 'disconnected'; // disconnected, connecting, connected, reconnecting
   }
 
   async connect() {
-    if (this.connecting) {
-      console.log('[Telegram] Already connecting, skipping...');
-      return false;
-    }
-
     if (!this.config.get('telegram.token')) {
       console.log('[Telegram] No token provided, skipping Telegram bot');
-      this.connectionState = 'disconnected';
       return false;
     }
 
-    this.connecting = true;
-    this.connectionState = 'connecting';
     console.log('[Telegram] Connecting...');
 
     try {
-      // Create custom HTTPS agent that forces IPv4
-      const agent = new https.Agent({
-        family: 4,  // Force IPv4
-        keepAlive: true,
-        keepAliveMsecs: 30000
-      });
-
-      this.bot = new Telegraf(this.config.get('telegram.token'), {
-        telegram: {
-          agent: agent,
-          apiRoot: 'https://api.telegram.org'
-        }
-      });
+      this.bot = new Telegraf(this.config.get('telegram.token'));
 
       // Setup handlers
       this.setupHandlers();
@@ -69,7 +28,6 @@ class TelegramClient extends EventEmitter {
       // Setup error handlers
       this.bot.catch((err, ctx) => {
         console.error('[Telegram] Bot error:', err.message);
-        // Don't crash on individual message errors
         try {
           if (ctx && ctx.reply) {
             ctx.reply('An error occurred processing your request. Please try again.');
@@ -79,35 +37,20 @@ class TelegramClient extends EventEmitter {
         }
       });
 
-      // Test connection with multiple retries
-      const connected = await this.testConnection();
+      // Test connection
+      const botInfo = await this.bot.telegram.getMe();
+      console.log(`[Telegram] Bot authenticated: @${botInfo.username}`);
 
-      if (connected) {
-        // Start polling
-        await this.startPolling();
+      // Start polling
+      await this.startPolling();
 
-        // Start health monitoring
-        this.startHealthMonitoring();
-
-        this.ready = true;
-        this.connecting = false;
-        this.reconnectAttempts = 0;
-        this.reconnectDelay = 1000; // Reset delay
-        this.connectionState = 'connected';
-        console.log('[Telegram] ✅ Connected and ready!');
-        this.emit('ready');
-        return true;
-      } else {
-        throw new Error('Connection test failed');
-      }
+      this.ready = true;
+      console.log('[Telegram] Connected and ready');
+      this.emit('ready');
+      return true;
     } catch (err) {
-      console.error('[Telegram] ❌ Connection failed:', err.message);
+      console.error('[Telegram] Connection failed:', err.message);
       this.ready = false;
-      this.connecting = false;
-      this.connectionState = 'disconnected';
-
-      // Schedule reconnection
-      this.scheduleReconnect();
       return false;
     }
   }
@@ -133,19 +76,12 @@ class TelegramClient extends EventEmitter {
     // Handle polling errors
     this.bot.on('polling_error', (error) => {
       console.error('[Telegram] Polling error:', error.message);
-
-      // Check if it's a network error that requires reconnection
-      if (this.isNetworkError(error)) {
-        console.log('[Telegram] Network error detected, reconnecting...');
-        this.handleDisconnection();
-      }
     });
   }
 
   async safeHandle(ctx, handler) {
     try {
       await handler();
-      this.lastHealthCheck = Date.now(); // Update health check on successful message
     } catch (err) {
       console.error('[Telegram] Handler error:', err.message);
       try {
@@ -158,74 +94,16 @@ class TelegramClient extends EventEmitter {
     }
   }
 
-  isNetworkError(error) {
-    const networkErrors = [
-      'ETIMEDOUT',
-      'ECONNRESET',
-      'ECONNREFUSED',
-      'ENOTFOUND',
-      'ENETUNREACH',
-      'EHOSTUNREACH',
-      'EPIPE',
-      'EAI_AGAIN'
-    ];
-
-    return networkErrors.some(code =>
-      error.code === code ||
-      error.message.includes(code) ||
-      error.message.includes('network') ||
-      error.message.includes('timeout') ||
-      error.message.includes('connection')
-    );
-  }
-
-  async testConnection(retries = 3) {
-    for (let i = 0; i < retries; i++) {
-      try {
-        console.log(`[Telegram] Testing connection (attempt ${i + 1}/${retries})...`);
-
-        const testPromise = this.bot.telegram.getMe();
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Connection test timeout')), 15000)
-        );
-
-        const botInfo = await Promise.race([testPromise, timeoutPromise]);
-        console.log(`[Telegram] ✓ Bot authenticated: @${botInfo.username}`);
-        this.lastHealthCheck = Date.now();
-        return true;
-      } catch (err) {
-        console.error(`[Telegram] Connection test failed (${i + 1}/${retries}):`, err.message);
-
-        if (i < retries - 1) {
-          // Wait before retry with exponential backoff
-          const delay = Math.min(1000 * Math.pow(2, i), 5000);
-          console.log(`[Telegram] Retrying in ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      }
-    }
-
-    return false;
-  }
-
   async startPolling() {
     try {
       // Remove any existing webhooks
       await this.bot.telegram.deleteWebhook({ drop_pending_updates: true });
 
-      // Start polling (don't await - it runs indefinitely)
+      // Start polling
       this.bot.launch({
         allowedUpdates: ['message', 'callback_query'],
         dropPendingUpdates: true
-      }).catch(err => {
-        console.error('[Telegram] Polling error:', err.message);
-        if (this.isNetworkError(err)) {
-          this.handleDisconnection();
-        }
       });
-
-      // Give it a moment to start
-      await new Promise(resolve => setTimeout(resolve, 1000));
 
       console.log('[Telegram] Polling started');
 
@@ -243,99 +121,6 @@ class TelegramClient extends EventEmitter {
     }
   }
 
-  startHealthMonitoring() {
-    // Clear any existing health check
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-    }
-
-    // Check connection health every 30 seconds
-    this.healthCheckInterval = setInterval(async () => {
-      await this.checkHealth();
-    }, this.healthCheckTimeout);
-  }
-
-  async checkHealth() {
-    // If we haven't received any activity in a while, ping the bot API
-    const timeSinceLastCheck = Date.now() - this.lastHealthCheck;
-
-    if (timeSinceLastCheck > this.healthCheckTimeout) {
-      console.log('[Telegram] Health check: Pinging bot API...');
-
-      try {
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Health check timeout')), 10000)
-        );
-
-        await Promise.race([
-          this.bot.telegram.getMe(),
-          timeoutPromise
-        ]);
-
-        this.lastHealthCheck = Date.now();
-        console.log('[Telegram] Health check: OK');
-      } catch (err) {
-        console.error('[Telegram] Health check failed:', err.message);
-
-        if (this.isNetworkError(err)) {
-          console.log('[Telegram] Health check indicates network issue, reconnecting...');
-          this.handleDisconnection();
-        }
-      }
-    }
-  }
-
-  handleDisconnection() {
-    if (this.connectionState === 'reconnecting' || this.connectionState === 'connecting') {
-      console.log('[Telegram] Already reconnecting, skipping...');
-      return;
-    }
-
-    console.log('[Telegram] Handling disconnection...');
-    this.ready = false;
-    this.connectionState = 'reconnecting';
-
-    // Stop health monitoring
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-      this.healthCheckInterval = null;
-    }
-
-    // Stop the bot
-    try {
-      if (this.bot) {
-        this.bot.stop();
-      }
-    } catch (err) {
-      console.error('[Telegram] Error stopping bot:', err.message);
-    }
-
-    // Schedule reconnection
-    this.scheduleReconnect();
-  }
-
-  scheduleReconnect() {
-    // Clear any existing reconnect timer
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-    }
-
-    this.reconnectAttempts++;
-
-    // Calculate delay with exponential backoff
-    const delay = Math.min(
-      this.reconnectDelay * Math.pow(2, Math.min(this.reconnectAttempts - 1, 6)),
-      this.maxReconnectDelay
-    );
-
-    console.log(`[Telegram] Scheduling reconnection attempt ${this.reconnectAttempts} in ${delay}ms...`);
-
-    this.reconnectTimer = setTimeout(async () => {
-      console.log(`[Telegram] Reconnection attempt ${this.reconnectAttempts}...`);
-      await this.connect();
-    }, delay);
-  }
-
   async handleStart(ctx) {
     const userId = ctx.from.id.toString();
 
@@ -344,9 +129,9 @@ class TelegramClient extends EventEmitter {
       return;
     }
 
-    const message = `👋 Welcome to VibeManager Bot!
+    const message = `Welcome to VibeManager Bot!
 
-🎯 What I can do:
+What I can do:
 • Create and manage AI coding sessions
 • Start autonomous Ralph loops that run 24/7
 • Monitor task progress & logs in real-time
@@ -354,14 +139,14 @@ class TelegramClient extends EventEmitter {
 • Send notifications when tasks complete
 • Execute tasks in the background while you sleep!
 
-✨ Background Execution:
+Background Execution:
 Start a Ralph loop and close this app - tasks continue running!
 I'll notify you when:
-  ✅ Tasks complete
-  ⚠️ Tasks get stuck
-  🎉 Ralph finishes all work
+  [DONE] Tasks complete
+  [WARN] Tasks get stuck
+  [COMPLETE] Ralph finishes all work
 
-📚 Essential Commands:
+Essential Commands:
 Session Management:
 /create <name> - Create new session
 /start <name> - Start session
@@ -388,10 +173,10 @@ Monitoring:
 
 /help - Show detailed command help
 
-🌐 Dashboard: http://localhost:3131`;
+Dashboard: http://localhost:3131`;
 
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('📚 Show Commands', 'help')]
+      [Markup.button.callback('[HELP] Show Commands', 'help')]
     ]);
 
     await ctx.reply(message, keyboard);
@@ -399,7 +184,7 @@ Monitoring:
 
   async handleHelp(ctx) {
     const helpText = this.botService.parser.getHelp();
-    await ctx.reply('📚 VibeManager Bot Commands\n\n' + helpText);
+    await ctx.reply('[HELP] VibeManager Bot Commands\n\n' + helpText);
   }
 
   async handleCommand(ctx) {
@@ -429,7 +214,7 @@ Monitoring:
     const validation = this.botService.parser.validate(parsed);
     if (!validation.valid) {
       const usage = this.botService.parser.formatUsage(parsed.command, parsed.subcommand);
-      await ctx.reply(`❌ Missing parameters: ${validation.missing.join(', ')}\n\nUsage: ${usage}`);
+      await ctx.reply(`[ERROR] Missing parameters: ${validation.missing.join(', ')}\n\nUsage: ${usage}`);
       return;
     }
 
@@ -463,7 +248,7 @@ Monitoring:
     // Handle special callbacks
     if (data === 'help') {
       const helpText = this.botService.parser.getHelp();
-      await ctx.editMessageText('📚 VibeManager Bot Commands\n\n' + helpText);
+      await ctx.editMessageText('[HELP] VibeManager Bot Commands\n\n' + helpText);
       await ctx.answerCbQuery();
       return;
     }
@@ -563,25 +348,16 @@ Monitoring:
 
   async sendNotification(userId, message) {
     if (!this.ready) {
-      console.log('[Telegram] Bot not ready, queuing notification...');
-      // Could implement a queue here for offline notifications
+      console.log('[Telegram] Bot not ready, cannot send notification');
       return false;
     }
 
     try {
       const keyboard = message.buttons ? this.createKeyboard(message.buttons) : undefined;
       await this.bot.telegram.sendMessage(userId, message.text, keyboard);
-      this.lastHealthCheck = Date.now(); // Update health check on successful send
       return true;
     } catch (err) {
       console.error('[Telegram] Failed to send notification:', err.message);
-
-      // Check if it's a network error
-      if (this.isNetworkError(err)) {
-        console.log('[Telegram] Network error during notification, reconnecting...');
-        this.handleDisconnection();
-      }
-
       return false;
     }
   }
@@ -589,19 +365,6 @@ Monitoring:
   disconnect() {
     console.log('[Telegram] Disconnecting...');
 
-    // Clear reconnect timer
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-
-    // Clear health check
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-      this.healthCheckInterval = null;
-    }
-
-    // Stop the bot
     if (this.bot) {
       try {
         this.bot.stop();
@@ -611,17 +374,13 @@ Monitoring:
     }
 
     this.ready = false;
-    this.connectionState = 'disconnected';
     console.log('[Telegram] Disconnected');
   }
 
   getStatus() {
     return {
       connected: this.ready,
-      enabled: !!this.config.get('telegram.token'),
-      connectionState: this.connectionState,
-      reconnectAttempts: this.reconnectAttempts,
-      lastHealthCheck: new Date(this.lastHealthCheck).toISOString()
+      enabled: !!this.config.get('telegram.token')
     };
   }
 }

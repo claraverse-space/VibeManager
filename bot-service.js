@@ -60,9 +60,9 @@ class BotService extends EventEmitter {
         this.notifySubscribers(sessionName, {
           text: this.formatter.formatTaskComplete(sessionName, task),
           buttons: [
-            { id: `status:${sessionName}`, label: '📊 Status' },
-            { id: `tasks:${sessionName}`, label: '📝 Tasks' },
-            { id: `ralph_pause:${sessionName}`, label: '⏸️ Pause' }
+            { id: `status:${sessionName}`, label: '[Status]' },
+            { id: `tasks:${sessionName}`, label: '[Tasks]' },
+            { id: `ralph_pause:${sessionName}`, label: '[Pause]' }
           ]
         });
       }
@@ -77,9 +77,9 @@ class BotService extends EventEmitter {
         this.notifySubscribers(sessionName, {
           text: this.formatter.formatTaskStuck(sessionName, currentTask, 3),
           buttons: [
-            { id: `ralph_verify:${sessionName}`, label: '🔍 Verify' },
-            { id: `ralph_resume:${sessionName}`, label: '▶️ Resume' },
-            { id: `ralph_stop:${sessionName}`, label: '🛑 Stop' }
+            { id: `ralph_verify:${sessionName}`, label: '[Verify]' },
+            { id: `ralph_resume:${sessionName}`, label: '[Resume]' },
+            { id: `ralph_stop:${sessionName}`, label: '[Stop]' }
           ]
         });
       }
@@ -93,8 +93,8 @@ class BotService extends EventEmitter {
       this.notifySubscribers(sessionName, {
         text: this.formatter.formatRalphComplete(sessionName, stats.completed, duration),
         buttons: [
-          { id: `status:${sessionName}`, label: '📊 Status' },
-          { id: `tasks:${sessionName}`, label: '📝 Tasks' }
+          { id: `status:${sessionName}`, label: '[Status]' },
+          { id: `tasks:${sessionName}`, label: '[Tasks]' }
         ]
       });
     });
@@ -106,8 +106,8 @@ class BotService extends EventEmitter {
           suggestion: error.message
         }),
         buttons: [
-          { id: `status:${sessionName}`, label: '📊 Status' },
-          { id: `stop:${sessionName}`, label: '🛑 Stop' }
+          { id: `status:${sessionName}`, label: '[Status]' },
+          { id: `stop:${sessionName}`, label: '[Stop]' }
         ]
       });
     });
@@ -208,8 +208,8 @@ class BotService extends EventEmitter {
     return {
       text: this.formatter.formatSessionCreated(session),
       buttons: [
-        { id: `start:${name}`, label: '▶️ Start' },
-        { id: `status:${name}`, label: '📊 Status' }
+        { id: `start:${name}`, label: '[Start]' },
+        { id: `status:${name}`, label: '[Status]' }
       ]
     };
   }
@@ -224,10 +224,10 @@ class BotService extends EventEmitter {
 
     if (session.alive) {
       return {
-        text: `ℹ️ Session "${name}" is already running`,
+        text: `[INFO] Session "${name}" is already running`,
         buttons: [
-          { id: `stop:${name}`, label: '⏸️ Stop' },
-          { id: `status:${name}`, label: '📊 Status' }
+          { id: `stop:${name}`, label: '[Stop]' },
+          { id: `status:${name}`, label: '[Status]' }
         ]
       };
     }
@@ -235,11 +235,11 @@ class BotService extends EventEmitter {
     this.sessionManager.revive(name);
 
     return {
-      text: `✅ Session "${name}" started\n\n💻 Code: http://localhost:${process.env.CODE_PORT || 8083}`,
+      text: `[OK] Session "${name}" started\n\nCode: http://localhost:${process.env.CODE_PORT || 8083}`,
       buttons: [
-        { id: `stop:${name}`, label: '⏸️ Stop' },
-        { id: `ralph_start:${name}`, label: '🔄 Start Ralph' },
-        { id: `status:${name}`, label: '📊 Status' }
+        { id: `stop:${name}`, label: '[Stop]' },
+        { id: `ralph_start:${name}`, label: '[Ralph]' },
+        { id: `status:${name}`, label: '[Status]' }
       ]
     };
   }
@@ -255,10 +255,10 @@ class BotService extends EventEmitter {
     this.sessionManager.stop(name);
 
     return {
-      text: `⏸️ Session "${name}" stopped\n\nAll progress is saved.`,
+      text: `[OK] Session "${name}" stopped\n\nAll progress is saved.`,
       buttons: [
-        { id: `start:${name}`, label: '▶️ Start Again' },
-        { id: `status:${name}`, label: '📊 Status' }
+        { id: `start:${name}`, label: '[Start]' },
+        { id: `status:${name}`, label: '[Status]' }
       ]
     };
   }
@@ -268,7 +268,7 @@ class BotService extends EventEmitter {
     this.sessionManager.delete(name);
 
     return {
-      text: `🗑️ Session "${name}" deleted`,
+      text: `[OK] Session "${name}" deleted`,
       buttons: []
     };
   }
@@ -305,10 +305,10 @@ class BotService extends EventEmitter {
       text: this.formatter.formatSessionStatus(session, ralphStatus),
       buttons: [
         session.alive
-          ? { id: `stop:${name}`, label: '⏸️ Stop' }
-          : { id: `start:${name}`, label: '▶️ Start' },
-        { id: `tasks:${name}`, label: '📝 Tasks' },
-        { id: `ralph_start:${name}`, label: '🔄 Ralph' }
+          ? { id: `stop:${name}`, label: '[Stop]' }
+          : { id: `start:${name}`, label: '[Start]' },
+        { id: `tasks:${name}`, label: '[Tasks]' },
+        { id: `ralph_start:${name}`, label: '[Ralph]' }
       ]
     };
   }
@@ -324,9 +324,9 @@ class BotService extends EventEmitter {
     const url = `http://localhost:${process.env.PORT || 3131}/attach/${name}`;
 
     return {
-      text: `🔗 Terminal Attachment\n\nSession: ${name}\nURL: ${url}\n\n💡 Copy this URL and open it in your browser to access the terminal.\n\nNote: This only works if you're on the same machine or network as the server.`,
+      text: `[ATTACH] Terminal\n\nSession: ${name}\nURL: ${url}\n\n[TIP] Copy this URL and open it in your browser to access the terminal.\n\nNote: This only works if you're on the same machine or network as the server.`,
       buttons: [
-        { id: `status:${name}`, label: '📊 Status' }
+        { id: `status:${name}`, label: '[Status]' }
       ]
     };
   }
@@ -342,9 +342,9 @@ class BotService extends EventEmitter {
     const url = `http://localhost:${process.env.CODE_PORT || 8083}`;
 
     return {
-      text: `💻 VS Code Editor\n\nSession: ${name}\nURL: ${url}\n\n💡 Copy this URL and open it in your browser to access the editor.\n\nNote: This only works if you're on the same machine or network as the server.`,
+      text: `[CODE] VS Code Editor\n\nSession: ${name}\nURL: ${url}\n\n[TIP] Copy this URL and open it in your browser to access the editor.\n\nNote: This only works if you're on the same machine or network as the server.`,
       buttons: [
-        { id: `status:${name}`, label: '📊 Status' }
+        { id: `status:${name}`, label: '[Status]' }
       ]
     };
   }
@@ -369,10 +369,10 @@ class BotService extends EventEmitter {
     const task = this.sessionManager.addTask(session, title, description);
 
     return {
-      text: `✅ Task Added\n\n📋 Task: ${description}\n🆔 ID: ${task.id}\n⚡ Status: Pending`,
+      text: `[OK] Task Added\n\nTask: ${description}\nID: ${task.id}\nStatus: Pending`,
       buttons: [
-        { id: `ralph_start:${session}`, label: '🔄 Start Ralph' },
-        { id: `tasks:${session}`, label: '📝 View All' }
+        { id: `ralph_start:${session}`, label: '[Ralph]' },
+        { id: `tasks:${session}`, label: '[View All]' }
       ]
     };
   }
@@ -384,8 +384,8 @@ class BotService extends EventEmitter {
     return {
       text: this.formatter.formatTaskList(tasks, session),
       buttons: [
-        { id: `progress:${session}`, label: '📊 Progress' },
-        { id: `ralph_start:${session}`, label: '🔄 Start Ralph' }
+        { id: `progress:${session}`, label: '[Progress]' },
+        { id: `ralph_start:${session}`, label: '[Ralph]' }
       ]
     };
   }
@@ -402,8 +402,8 @@ class BotService extends EventEmitter {
     return {
       text: this.formatter.formatTaskProgress(currentTask, session),
       buttons: [
-        { id: `tasks:${session}`, label: '📝 All Tasks' },
-        { id: `ralph_pause:${session}`, label: '⏸️ Pause' }
+        { id: `tasks:${session}`, label: '[All Tasks]' },
+        { id: `ralph_pause:${session}`, label: '[Pause]' }
       ]
     };
   }
@@ -428,8 +428,8 @@ class BotService extends EventEmitter {
     return {
       text: this.formatter.formatPRDCreated(session, description),
       buttons: [
-        { id: `ralph_start:${session}`, label: '🔄 Start Ralph' },
-        { id: `tasks:${session}`, label: '📝 View Tasks' }
+        { id: `ralph_start:${session}`, label: '[Ralph]' },
+        { id: `tasks:${session}`, label: '[Tasks]' }
       ]
     };
   }
@@ -453,8 +453,8 @@ class BotService extends EventEmitter {
     return {
       text: this.formatter.formatLogs(session, logs, numLines),
       buttons: [
-        { id: `status:${session}`, label: '📊 Status' },
-        { id: `tasks:${session}`, label: '📝 Tasks' }
+        { id: `status:${session}`, label: '[Status]' },
+        { id: `tasks:${session}`, label: '[Tasks]' }
       ]
     };
   }
@@ -462,7 +462,7 @@ class BotService extends EventEmitter {
   async handleGPU(params) {
     if (!this.gpuMonitor) {
       return {
-        text: '🎮 GPU Stats\n\nGPU monitoring not available.\n\n💡 GPU monitoring requires the system to have GPU monitoring tools installed (nvidia-smi, rocm-smi, xpu-smi).',
+        text: '[GPU] Stats\n\nGPU monitoring not available.\n\n[TIP] GPU monitoring requires the system to have GPU monitoring tools installed (nvidia-smi, rocm-smi, xpu-smi).',
         buttons: []
       };
     }
@@ -498,11 +498,11 @@ class BotService extends EventEmitter {
         this.ralphLoop.initLoopState(session, { maxIterations: 50, circuitBreakerThreshold: 3 });
         await this.ralphLoop.startLoop(session);
         result = {
-          text: `🚀 Ralph Started\n\nAutonomous loop is running for ${session}!\nI'll notify you when tasks complete.`,
+          text: `[RALPH] Started\n\nAutonomous loop is running for ${session}!\nI'll notify you when tasks complete.`,
           buttons: [
-            { id: `ralph_pause:${session}`, label: '⏸️ Pause' },
-            { id: `progress:${session}`, label: '📊 Progress' },
-            { id: `ralph_stop:${session}`, label: '🛑 Stop' }
+            { id: `ralph_pause:${session}`, label: '[Pause]' },
+            { id: `progress:${session}`, label: '[Progress]' },
+            { id: `ralph_stop:${session}`, label: '[Stop]' }
           ]
         };
         break;
@@ -510,11 +510,11 @@ class BotService extends EventEmitter {
       case 'pause':
         this.ralphLoop.pauseLoop(session);
         result = {
-          text: `⏸️ Ralph Paused\n\nLoop paused for ${session}. Progress saved.`,
+          text: `[RALPH] Paused\n\nLoop paused for ${session}. Progress saved.`,
           buttons: [
-            { id: `ralph_resume:${session}`, label: '▶️ Resume' },
-            { id: `status:${session}`, label: '📊 Status' },
-            { id: `ralph_stop:${session}`, label: '🛑 Stop' }
+            { id: `ralph_resume:${session}`, label: '[Resume]' },
+            { id: `status:${session}`, label: '[Status]' },
+            { id: `ralph_stop:${session}`, label: '[Stop]' }
           ]
         };
         break;
@@ -522,10 +522,10 @@ class BotService extends EventEmitter {
       case 'resume':
         await this.ralphLoop.resumeLoop(session);
         result = {
-          text: `▶️ Ralph Resumed\n\nContinuing loop for ${session}...`,
+          text: `[RALPH] Resumed\n\nContinuing loop for ${session}...`,
           buttons: [
-            { id: `ralph_pause:${session}`, label: '⏸️ Pause' },
-            { id: `progress:${session}`, label: '📊 Progress' }
+            { id: `ralph_pause:${session}`, label: '[Pause]' },
+            { id: `progress:${session}`, label: '[Progress]' }
           ]
         };
         break;
@@ -533,10 +533,10 @@ class BotService extends EventEmitter {
       case 'stop':
         this.ralphLoop.stopLoop(session);
         result = {
-          text: `🛑 Ralph Stopped\n\nLoop stopped for ${session}.`,
+          text: `[RALPH] Stopped\n\nLoop stopped for ${session}.`,
           buttons: [
-            { id: `status:${session}`, label: '📊 Status' },
-            { id: `ralph_start:${session}`, label: '🔄 Start Again' }
+            { id: `status:${session}`, label: '[Status]' },
+            { id: `ralph_start:${session}`, label: '[Start]' }
           ]
         };
         break;
@@ -544,10 +544,10 @@ class BotService extends EventEmitter {
       case 'verify':
         await this.ralphLoop.resumeWithVerification(session);
         result = {
-          text: `🔍 Verification Started\n\nAsking Claude if the task is actually complete...`,
+          text: `[RALPH] Verification Started\n\nAsking Claude if the task is actually complete...`,
           buttons: [
-            { id: `progress:${session}`, label: '📊 Progress' },
-            { id: `ralph_stop:${session}`, label: '🛑 Stop' }
+            { id: `progress:${session}`, label: '[Progress]' },
+            { id: `ralph_stop:${session}`, label: '[Stop]' }
           ]
         };
         break;

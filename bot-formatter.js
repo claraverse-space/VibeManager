@@ -7,13 +7,13 @@ class BotFormatter {
    * @returns {string} - Formatted message
    */
   formatError(error, context = {}) {
-    const lines = ['🚫 Error'];
+    const lines = ['[ERROR]'];
     lines.push('');
     lines.push(error);
 
     if (context.suggestion) {
       lines.push('');
-      lines.push(`💡 ${context.suggestion}`);
+      lines.push(`[TIP] ${context.suggestion}`);
     }
 
     return lines.join('\n');
@@ -26,20 +26,20 @@ class BotFormatter {
    * @returns {string} - Formatted message
    */
   formatSessionStatus(session, ralphStatus = null) {
-    const lines = [`📊 ${session.name}`];
+    const lines = [`[STATUS] ${session.name}`];
     lines.push('');
-    lines.push(`⚡ Status: ${session.alive ? 'Running ✅' : 'Stopped ⏸️'}`);
-    lines.push(`📂 Path: ${session.projectPath}`);
-    lines.push(`🤖 Agent: ${session.shellType}`);
+    lines.push(`Status: ${session.alive ? 'Running' : 'Stopped'}`);
+    lines.push(`Path: ${session.projectPath}`);
+    lines.push(`Agent: ${session.shellType}`);
 
     if (session.alive) {
-      lines.push(`🔌 Port: ${session.codePort || 'N/A'}`);
+      lines.push(`Port: ${session.codePort || 'N/A'}`);
     }
 
     // Add Ralph status if available
     if (ralphStatus && ralphStatus.status !== 'idle') {
       lines.push('');
-      lines.push('🔄 Ralph Loop');
+      lines.push('[RALPH] Loop Status');
       lines.push(`   Status: ${this.formatRalphStatus(ralphStatus.status)}`);
 
       if (ralphStatus.currentTaskId) {
@@ -52,13 +52,13 @@ class BotFormatter {
       }
 
       if (ralphStatus.status === 'stuck') {
-        lines.push(`   ⚠️ Task stuck - no progress`);
+        lines.push(`   [WARN] Task stuck - no progress`);
       }
     }
 
     const updatedAgo = this.formatTimeAgo(new Date(session.lastAccessedAt));
     lines.push('');
-    lines.push(`⏱️ Updated: ${updatedAgo}`);
+    lines.push(`Updated: ${updatedAgo}`);
 
     return lines.join('\n');
   }
@@ -70,18 +70,18 @@ class BotFormatter {
    */
   formatSessionList(sessions) {
     if (sessions.length === 0) {
-      return '📋 No sessions found\n\nUse /create to create your first session';
+      return '[SESSIONS] No sessions found\n\nUse /create to create your first session';
     }
 
     const running = sessions.filter(s => s.alive).length;
     const stopped = sessions.length - running;
 
-    const lines = [`📊 Sessions (${sessions.length} total)`];
-    lines.push(`   🟢 ${running} Running | ⚪ ${stopped} Stopped`);
+    const lines = [`[SESSIONS] ${sessions.length} total`];
+    lines.push(`   ${running} Running | ${stopped} Stopped`);
     lines.push('');
 
     for (const session of sessions) {
-      const status = session.alive ? '✅' : '⏸️';
+      const status = session.alive ? '[RUNNING]' : '[STOPPED]';
       const name = session.name.padEnd(20);
       lines.push(`${status} ${name}`);
 
@@ -101,10 +101,10 @@ class BotFormatter {
    */
   formatTaskList(tasks, sessionName) {
     if (tasks.length === 0) {
-      return `📋 No tasks for ${sessionName}\n\nUse /task ${sessionName} <description> to add a task`;
+      return `[TASKS] No tasks for ${sessionName}\n\nUse /task ${sessionName} <description> to add a task`;
     }
 
-    const lines = [`📋 Tasks for ${sessionName}`];
+    const lines = [`[TASKS] ${sessionName}`];
     lines.push('');
 
     for (const task of tasks) {
@@ -132,9 +132,9 @@ class BotFormatter {
    * @returns {string} - Formatted message
    */
   formatTaskProgress(task, sessionName) {
-    const lines = [`📊 ${sessionName} Progress`];
+    const lines = [`[PROGRESS] ${sessionName}`];
     lines.push('');
-    lines.push(`📋 Task: ${task.title}`);
+    lines.push(`Task: ${task.title}`);
     lines.push(`   Status: ${this.formatStatus(task.status)}`);
 
     if (task.progress !== undefined) {
@@ -165,7 +165,7 @@ class BotFormatter {
    * @returns {string} - Formatted message
    */
   formatTaskComplete(sessionName, task) {
-    const lines = ['🎉 Task Completed!'];
+    const lines = ['[DONE] Task Completed'];
     lines.push('');
     lines.push(`Session: ${sessionName}`);
     lines.push(`Task: ${task.title}`);
@@ -185,7 +185,7 @@ class BotFormatter {
    * @returns {string} - Formatted message
    */
   formatTaskStuck(sessionName, task, attempts) {
-    const lines = ['⚠️ Task Stuck'];
+    const lines = ['[WARN] Task Stuck'];
     lines.push('');
     lines.push(`Session: ${sessionName}`);
     lines.push(`Task: ${task.title}`);
@@ -205,13 +205,13 @@ class BotFormatter {
    * @returns {string} - Formatted message
    */
   formatRalphComplete(sessionName, totalTasks, duration) {
-    const lines = ['🎊 All Tasks Complete!'];
+    const lines = ['[COMPLETE] All Tasks Finished'];
     lines.push('');
     lines.push(`Session: ${sessionName}`);
     lines.push(`Tasks: ${totalTasks}/${totalTasks} completed`);
     lines.push(`Duration: ${this.formatDuration(duration)}`);
     lines.push('');
-    lines.push('Your project is ready! 🚀');
+    lines.push('Your project is ready!');
 
     return lines.join('\n');
   }
@@ -222,12 +222,12 @@ class BotFormatter {
    * @returns {string} - Formatted message
    */
   formatSessionCreated(session) {
-    const lines = ['✅ Session Created'];
+    const lines = ['[OK] Session Created'];
     lines.push('');
-    lines.push(`📁 Name: ${session.name}`);
-    lines.push(`📂 Path: ${session.projectPath}`);
-    lines.push(`🤖 Agent: ${session.shellType}`);
-    lines.push(`⚡ Status: ${session.alive ? 'Running' : 'Stopped'}`);
+    lines.push(`Name: ${session.name}`);
+    lines.push(`Path: ${session.projectPath}`);
+    lines.push(`Agent: ${session.shellType}`);
+    lines.push(`Status: ${session.alive ? 'Running' : 'Stopped'}`);
     lines.push('');
     lines.push('What\'s next?');
     lines.push(`• /start ${session.name} - Start the session`);
@@ -242,11 +242,11 @@ class BotFormatter {
    * @returns {string} - Formatted message
    */
   formatHelp(helpText) {
-    const lines = ['📚 VibeManager Bot Commands'];
+    const lines = ['[HELP] VibeManager Bot Commands'];
     lines.push('');
     lines.push(helpText);
     lines.push('');
-    lines.push('💡 Tip: Use buttons for quick actions');
+    lines.push('[TIP] Use buttons for quick actions');
 
     return lines.join('\n');
   }
@@ -258,7 +258,7 @@ class BotFormatter {
    * @returns {string} - Formatted message
    */
   formatUnauthorized(userId, platform) {
-    const lines = ['🚫 Access Denied'];
+    const lines = ['[DENIED] Access Denied'];
     lines.push('');
     lines.push('You\'re not authorized to use this bot.');
     lines.push(`Your ${platform} ID: ${userId}`);
@@ -273,32 +273,32 @@ class BotFormatter {
 
   getTaskIcon(status) {
     const icons = {
-      pending: '⏳',
-      in_progress: '🔄',
-      completed: '✅',
-      blocked: '🔴',
-      error: '❌'
+      pending: '[PENDING]',
+      in_progress: '[ACTIVE]',
+      completed: '[DONE]',
+      blocked: '[BLOCKED]',
+      error: '[ERROR]'
     };
-    return icons[status] || '❓';
+    return icons[status] || '[?]';
   }
 
   getStepIcon(status) {
     const icons = {
-      pending: '⚪',
-      in_progress: '🔵',
-      completed: '✅',
-      error: '❌'
+      pending: '[ ]',
+      in_progress: '[>]',
+      completed: '[X]',
+      error: '[!]'
     };
-    return icons[status] || '⚪';
+    return icons[status] || '[ ]';
   }
 
   formatStatus(status) {
     const formatted = {
-      pending: 'Pending ⏳',
-      in_progress: 'In Progress 🔄',
-      completed: 'Completed ✅',
-      blocked: 'Blocked 🔴',
-      error: 'Error ❌'
+      pending: 'Pending',
+      in_progress: 'In Progress',
+      completed: 'Completed',
+      blocked: 'Blocked',
+      error: 'Error'
     };
     return formatted[status] || status;
   }
@@ -306,10 +306,10 @@ class BotFormatter {
   formatRalphStatus(status) {
     const formatted = {
       idle: 'Idle',
-      running: 'Running 🔄',
-      paused: 'Paused ⏸️',
-      stuck: 'Stuck ⚠️',
-      complete: 'Complete ✅'
+      running: 'Running',
+      paused: 'Paused',
+      stuck: 'Stuck',
+      complete: 'Complete'
     };
     return formatted[status] || status;
   }
@@ -366,12 +366,12 @@ class BotFormatter {
    */
   formatGPUStats(stats) {
     if (!stats || !stats.gpus || stats.gpus.length === 0) {
-      return '🎮 GPU Stats\n\nNo GPUs detected or monitoring tools not available.\n\n💡 Install nvidia-smi (NVIDIA), rocm-smi (AMD), or xpu-smi (Intel) for detailed GPU monitoring.';
+      return '[GPU] Stats\n\nNo GPUs detected or monitoring tools not available.\n\n[TIP] Install nvidia-smi (NVIDIA), rocm-smi (AMD), or xpu-smi (Intel) for detailed GPU monitoring.';
     }
 
-    const lines = ['🎮 GPU Stats'];
+    const lines = ['[GPU] Stats'];
     lines.push('');
-    lines.push(`📊 Summary: ${stats.gpus.length} GPU(s) detected`);
+    lines.push(`Summary: ${stats.gpus.length} GPU(s) detected`);
 
     if (stats.summary) {
       lines.push(`   Total Memory: ${Math.round(stats.summary.totalMemory / 1024)}GB`);
@@ -408,7 +408,7 @@ class BotFormatter {
       }
 
       if (gpu.note) {
-        lines.push(`   ℹ️ ${gpu.note}`);
+        lines.push(`   [INFO] ${gpu.note}`);
       }
 
       lines.push('');
@@ -426,13 +426,13 @@ class BotFormatter {
    */
   formatLogs(sessionName, logs, lines = 50) {
     if (!logs || logs.trim() === '') {
-      return `📜 Logs: ${sessionName}\n\nNo logs available yet.\n\nStart the session and run some commands to see logs here.`;
+      return `[LOGS] ${sessionName}\n\nNo logs available yet.\n\nStart the session and run some commands to see logs here.`;
     }
 
     const logLines = logs.trim().split('\n').slice(-lines);
     const truncated = this.truncate(logLines.join('\n'), 3500);
 
-    return `📜 Logs: ${sessionName}\n(Last ${logLines.length} lines)\n\n\`\`\`\n${truncated}\n\`\`\``;
+    return `[LOGS] ${sessionName}\n(Last ${logLines.length} lines)\n\n\`\`\`\n${truncated}\n\`\`\``;
   }
 
   /**
@@ -443,7 +443,7 @@ class BotFormatter {
    */
   formatPRDCreated(sessionName, prdContent) {
     const preview = this.truncate(prdContent, 500);
-    const lines = ['📋 PRD Created'];
+    const lines = ['[PRD] Created'];
     lines.push('');
     lines.push(`Session: ${sessionName}`);
     lines.push('');
