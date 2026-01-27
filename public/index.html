@@ -7,6 +7,7 @@
   <link rel="icon" type="image/x-icon" href="https://claraverse.app/favicon.ico">
   <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -2197,7 +2198,10 @@
     <div class="dashboard-container" id="dashboard-container">
       <div class="dashboard-header">
         <h1>Projects</h1>
-        <button id="btn-new-from-dash" onclick="openNewSessionModal()">+ New Project</button>
+        <div style="display: flex; gap: 8px;">
+          <button onclick="window.location.href='/settings.html'" style="background: #6366f1;">🤖 Bot Settings</button>
+          <button id="btn-new-from-dash" onclick="openNewSessionModal()">+ New Project</button>
+        </div>
       </div>
       <div class="stats-bar" id="stats-bar"></div>
       <div class="cards-grid" id="cards-grid"></div>
@@ -2296,7 +2300,7 @@
   <div class="status-bar">
     <span id="status-shell">--</span>
     <span><span class="status-dot" id="status-dot"></span><span id="status-connection">Disconnected</span></span>
-    <span id="notify-toggle" title="Toggle notification sound" style="cursor:pointer;margin-left:8px;">🔔</span>
+    <span id="notify-toggle" title="Toggle notification sound" style="cursor:pointer;margin-left:8px;"><i data-lucide="bell" style="width:14px;height:14px;vertical-align:middle;"></i></span>
   </div>
 
   <!-- Sessions modal -->
@@ -2505,7 +2509,15 @@
     }
 
     function updateNotifyIcon() {
-      document.getElementById('notify-toggle').textContent = notifySoundEnabled ? '🔔' : '🔕';
+      const toggle = document.getElementById('notify-toggle');
+      toggle.textContent = '';
+      const icon = document.createElement('i');
+      icon.setAttribute('data-lucide', notifySoundEnabled ? 'bell' : 'bell-off');
+      icon.style.width = '14px';
+      icon.style.height = '14px';
+      icon.style.verticalAlign = 'middle';
+      toggle.appendChild(icon);
+      lucide.createIcons();
     }
 
     const isMobile = window.innerWidth <= 600;
@@ -3524,6 +3536,9 @@
         const ralphData = await ralphRes.json();
 
         renderTasksModal(tasksData, ralphData);
+
+        // Initialize icons after rendering
+        setTimeout(() => lucide.createIcons(), 50);
       } catch (err) {
         console.error('Failed to load tasks:', err);
       }
@@ -3565,7 +3580,7 @@
       const stepElement = taskElement.querySelector(`.task-step[data-step="${data.completedStep}"]`);
       if (stepElement) {
         stepElement.className = 'task-step completed';
-        stepElement.textContent = `✓ ${data.completedStep}`;
+        stepElement.textContent = data.completedStep;
       }
     }
 
@@ -3589,21 +3604,24 @@
       badge.textContent = ralphStatus.toUpperCase();
       badge.className = `ralph-status-badge ${ralphStatus}`;
 
-      // Update Ralph controls
+      // Update Ralph controls - Note: innerHTML is safe here as all values are hardcoded strings
       const controls = document.getElementById('ralph-controls');
       if (ralphStatus === 'running') {
         controls.innerHTML = `
+          <button class="btn-pause" onclick="checkTaskCompletion()" style="background: var(--accent);">Check</button>
           <button class="btn-pause" onclick="pauseRalph()">Pause</button>
           <button class="btn-stop" onclick="stopRalph()">Stop</button>
         `;
       } else if (ralphStatus === 'stuck') {
         controls.innerHTML = `
-          <button class="btn-start" onclick="resumeWithVerification()" style="background: var(--accent);">Verify & Resume</button>
+          <button class="btn-pause" onclick="checkTaskCompletion()" style="background: var(--accent);">Check</button>
+          <button class="btn-start" onclick="resumeWithVerification()">Verify & Resume</button>
           <button class="btn-start" onclick="resumeRalph()">Force Resume</button>
           <button class="btn-stop" onclick="stopRalph()">Stop</button>
         `;
       } else if (ralphStatus === 'paused') {
         controls.innerHTML = `
+          <button class="btn-pause" onclick="checkTaskCompletion()" style="background: var(--accent);">Check</button>
           <button class="btn-start" onclick="resumeRalph()">Resume</button>
           <button class="btn-stop" onclick="stopRalph()">Stop</button>
         `;
@@ -3637,8 +3655,8 @@
         if (steps.length > 0) {
           stepsHtml = '<div class="task-steps">';
           for (const step of steps) {
-            const icon = step.status === 'completed' ? '✓' : step.status === 'in-progress' ? '◉' : '○';
-            stepsHtml += `<span class="task-step ${step.status}">${icon} ${escapeHtml(step.name)}</span>`;
+            const iconName = step.status === 'completed' ? 'check-circle' : step.status === 'in-progress' ? 'loader' : 'circle';
+            stepsHtml += `<span class="task-step ${step.status}"><i data-lucide="${iconName}" style="width:12px;height:12px;"></i> ${escapeHtml(step.name)}</span>`;
           }
           stepsHtml += '</div>';
         }
@@ -3676,7 +3694,7 @@
             </div>
             <div class="task-actions">
               ${doneBtn}
-              <button onclick="deleteTask('${taskId}')">&#128465;</button>
+              <button onclick="deleteTask('${taskId}')"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
             </div>
           </div>
         `;
@@ -3829,8 +3847,61 @@
       }
     }
 
+    async function checkTaskCompletion() {
+      if (!currentTasksSession) return;
+
+      try {
+        const response = await fetch(`/api/sessions/${encodeURIComponent(currentTasksSession)}/ralph/check`, {
+          method: 'POST'
+        });
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to check task');
+        }
+
+        await refreshTasksModal();
+
+        // Show check result
+        const status = result.isComplete ? 'COMPLETE' :
+                      result.isStuck ? 'STUCK' :
+                      result.error ? 'ERROR' : 'IN PROGRESS';
+        const message = result.message || result.indicators?.join(', ') || 'No details';
+        showToast(`Task: ${status} - ${message}`, status === 'COMPLETE' ? 3000 : 2000);
+
+        // If complete, offer to mark it
+        if (result.isComplete) {
+          if (confirm('Task appears complete. Mark it as done and move to next task?')) {
+            await forceCompleteTask();
+          }
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    async function forceCompleteTask() {
+      if (!currentTasksSession) return;
+
+      try {
+        const response = await fetch(`/api/sessions/${encodeURIComponent(currentTasksSession)}/ralph/complete`, {
+          method: 'POST'
+        });
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to complete task');
+        }
+
+        await refreshTasksModal();
+        showToast('Task marked complete!');
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
     // --- Session Switcher ---
-    const sessionIcons = ['◆', '●', '■', '▲', '★', '◈', '◉', '▣', '◍', '⬟'];
+    const sessionIcons = ['#1', '#2', '#3', '#4', '#5', '#6', '#7', '#8', '#9', '#10'];
 
     function renderSessionSwitcher(sessions) {
       const container = document.getElementById('session-switcher');
@@ -4527,6 +4598,9 @@
       setView('dashboard');
       connectStatusWs();
       loadMemory(); // Load cross-session memory
+
+      // Initialize Lucide icons
+      setTimeout(() => lucide.createIcons(), 100);
     }
 
     init();

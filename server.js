@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -11,6 +13,7 @@ const SessionManager = require('./session-manager');
 const RalphLoop = require('./ralph-loop');
 const ConversationLinker = require('./conversation-linker');
 const SummaryGenerator = require('./summary-generator');
+const BotService = require('./bot-service');
 
 const app = express();
 const server = http.createServer(app);
@@ -126,6 +129,27 @@ const GPUMonitor = require('./gpu-monitor');
 const gpuMonitor = new GPUMonitor();
 const terminals = new Map(); // termId -> { term, sessionName, ws }
 const activeAttachments = new Map(); // sessionName -> Set<ws>
+
+// Initialize bot service (Discord + Telegram)
+let botService = new BotService(sessionManager, ralphLoop, gpuMonitor);
+botService.initialize().then(() => {
+  // Pass bot config to ralph loop for LLM-based detection
+  ralphLoop.setConfig(botService.config);
+}).catch(err => {
+  console.error('[BotService] Failed to initialize:', err);
+});
+
+// Function to restart bot service with new config
+async function restartBotService() {
+  if (botService) {
+    await botService.shutdown();
+  }
+  botService = new BotService(sessionManager, ralphLoop, gpuMonitor);
+  await botService.initialize();
+  // Pass bot config to ralph loop for LLM-based detection
+  ralphLoop.setConfig(botService.config);
+  return botService;
+}
 
 // --- Run Migrations on Startup ---
 function runMigrations() {
@@ -883,27 +907,35 @@ app.get('/api/sessions/:name/ralph/status', (req, res) => {
   res.json(state);
 });
 
-// Process completion check (manually trigger analysis)
-app.post('/api/sessions/:name/ralph/check', (req, res) => {
+// Check task completion status (without processing)
+app.post('/api/sessions/:name/ralph/check', async (req, res) => {
   const sessionName = req.params.name;
   const session = sessionManager.get(sessionName);
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
-  // Capture fresh scrollback and analyze
-  if (session.alive) {
-    sessionManager.captureScrollback(sessionName);
+  try {
+    const result = await ralphLoop.checkTaskCompletion(sessionName);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
+});
 
-  const analysis = sessionManager.analyzeSessionOutput(sessionName);
-  if (!analysis) {
-    return res.status(400).json({ error: 'No output to analyze' });
+// Force mark current task as complete
+app.post('/api/sessions/:name/ralph/complete', async (req, res) => {
+  const sessionName = req.params.name;
+  const session = sessionManager.get(sessionName);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  try {
+    const analysis = {
+      completion: { isComplete: true, confidence: 1.0, indicators: ['Manually marked complete'] }
+    };
+    const result = await ralphLoop.processTaskCompletion(sessionName, analysis);
+    res.json(result || { processed: true, action: 'complete' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
-
-  // Process the analysis through the loop
-  ralphLoop.processTaskCompletion(sessionName, analysis);
-
-  const state = ralphLoop.getLoopState(sessionName);
-  res.json({ analysis, loopState: state });
 });
 
 // Get all active loops status
@@ -1209,6 +1241,235 @@ app.get('/api/gpu/monitors', (req, res) => {
     platform: gpuMonitor.platform,
     availableMonitors: gpuMonitor.availableMonitors
   });
+});
+
+// --- Bot Configuration APIs ---
+
+// Get current bot configuration (Telegram only)
+app.get('/api/bot/config', (req, res) => {
+  const config = botService.config.config;
+  res.json({
+    telegram: {
+      token: config.telegram.token ? '***' + config.telegram.token.slice(-10) : '',
+      allowedUsers: config.telegram.allowedUsers
+    }
+  });
+});
+
+// Get bot connection status (Telegram only)
+app.get('/api/bot/status', (req, res) => {
+  const status = botService.getStatus();
+  res.json({
+    telegram: status.telegram
+  });
+});
+
+// Configure and test Telegram bot
+app.post('/api/bot/configure', async (req, res) => {
+  const { platform, token, allowedUsers } = req.body;
+
+  if (!platform || !token || !allowedUsers || allowedUsers.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing required fields'
+    });
+  }
+
+  if (platform !== 'telegram') {
+    return res.status(400).json({
+      success: false,
+      error: 'Only Telegram platform is supported'
+    });
+  }
+
+  try {
+    // Save to config
+    botService.config.set('telegram.enabled', true);
+    botService.config.set('telegram.token', token);
+    botService.config.set('telegram.allowedUsers', allowedUsers);
+
+    // Set environment variables
+    process.env.TELEGRAM_BOT_TOKEN = token;
+    process.env.TELEGRAM_ALLOWED_USERS = allowedUsers.join(',');
+
+    // Restart bot service with new config
+    console.log('[BotService] Restarting Telegram bot...');
+    await restartBotService();
+
+    // Wait for connection (up to 10 seconds)
+    let attempts = 0;
+    while (attempts < 20 && !botService.telegram?.ready) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      attempts++;
+    }
+
+    // Send test message to user
+    const userId = allowedUsers[0];
+    let testSent = false;
+
+    if (botService.telegram?.ready) {
+      try {
+        await botService.telegram.sendNotification(userId, {
+          text: '🎉 VibeManager Bot Connected!\n\nYour Telegram bot is now configured and ready to use.\n\nTry these commands:\n/help - See all commands\n/list - List sessions\n/create my-test - Create a test session'
+        });
+        testSent = true;
+      } catch (err) {
+        console.error('[Bot] Failed to send test message:', err.message);
+      }
+    }
+
+    if (testSent) {
+      res.json({
+        success: true,
+        message: '✅ Bot configured successfully! Check your Telegram for a test message.'
+      });
+    } else {
+      res.json({
+        success: true,
+        message: '⚠️ Bot is connecting... It may take a moment for the connection to establish. Try /help in Telegram.'
+      });
+    }
+  } catch (err) {
+    console.error('[Bot] Configuration error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
+// --- Provider Configuration APIs ---
+
+// Get provider configuration
+app.get('/api/provider/config', (req, res) => {
+  const config = botService.config.config;
+  res.json({
+    provider: config.provider?.name || '',
+    baseUrl: config.provider?.baseUrl || '',
+    apiKey: config.provider?.apiKey ? '***' + config.provider.apiKey.slice(-8) : '',
+    customUrl: config.provider?.customUrl || '',
+    model: config.provider?.model || '',
+    detection: config.detection || { method: 'both', interval: 60 }
+  });
+});
+
+// Configure provider
+app.post('/api/provider/configure', (req, res) => {
+  const { provider, baseUrl, apiKey, model } = req.body;
+
+  if (!provider || !apiKey) {
+    return res.status(400).json({ success: false, error: 'Provider and API key required' });
+  }
+
+  try {
+    botService.config.set('provider.name', provider);
+    botService.config.set('provider.baseUrl', baseUrl);
+    botService.config.set('provider.apiKey', apiKey);
+    botService.config.set('provider.model', model || '');
+
+    if (provider === 'custom') {
+      botService.config.set('provider.customUrl', baseUrl);
+    }
+
+    // Update summary generator config
+    if (summaryGenerator) {
+      summaryGenerator.saveSettings({ ai: { baseUrl, apiKey, model } });
+    }
+
+    res.json({ success: true, message: 'Provider configured successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Fetch models from provider
+app.post('/api/provider/models', async (req, res) => {
+  const { provider, baseUrl, apiKey } = req.body;
+
+  if (!baseUrl || !apiKey) {
+    return res.status(400).json({ success: false, error: 'Base URL and API key required' });
+  }
+
+  try {
+    const https = require('https');
+    const http = require('http');
+    const url = new URL(baseUrl + '/models');
+    const protocol = url.protocol === 'https:' ? https : http;
+
+    const options = {
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: url.pathname,
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + apiKey,
+        'Content-Type': 'application/json'
+      },
+      timeout: 15000
+    };
+
+    const request = protocol.request(options, (response) => {
+      let data = '';
+      response.on('data', chunk => data += chunk);
+      response.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.data && Array.isArray(json.data)) {
+            const models = json.data.map(m => ({
+              id: m.id,
+              name: m.id.split('/').pop()
+            })).sort((a, b) => a.name.localeCompare(b.name));
+            res.json({ success: true, models });
+          } else if (json.models && Array.isArray(json.models)) {
+            const models = json.models.map(m => ({
+              id: typeof m === 'string' ? m : m.id,
+              name: typeof m === 'string' ? m : (m.name || m.id)
+            })).sort((a, b) => a.name.localeCompare(b.name));
+            res.json({ success: true, models });
+          } else {
+            res.json({ success: false, error: 'Unexpected response format' });
+          }
+        } catch (e) {
+          res.json({ success: false, error: 'Failed to parse response: ' + e.message });
+        }
+      });
+    });
+
+    request.on('error', (err) => {
+      res.json({ success: false, error: 'Request failed: ' + err.message });
+    });
+
+    request.on('timeout', () => {
+      request.destroy();
+      res.json({ success: false, error: 'Request timed out' });
+    });
+
+    request.end();
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Configure task detection settings
+app.post('/api/provider/detection', (req, res) => {
+  const { method, interval } = req.body;
+
+  try {
+    botService.config.set('detection.method', method || 'both');
+    botService.config.set('detection.interval', Math.max(10, Math.min(300, interval || 60)));
+
+    // Update ralph loop detection settings
+    if (ralphLoop && ralphLoop.updateDetectionSettings) {
+      ralphLoop.updateDetectionSettings({
+        method: method || 'both',
+        interval: Math.max(10, Math.min(300, interval || 60))
+      });
+    }
+
+    res.json({ success: true, message: 'Detection settings saved' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // --- Summary APIs ---
@@ -1645,7 +1906,8 @@ wss.on('connection', (ws, req) => {
 });
 
 // Graceful shutdown: kill attach processes, NOT tmux sessions
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
+  await botService.shutdown();
   terminals.forEach(({ term }) => term.kill());
   server.close();
   process.exit(0);
