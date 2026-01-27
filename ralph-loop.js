@@ -11,6 +11,8 @@
 const EventEmitter = require('events');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
+const http = require('http');
 
 class RalphLoop extends EventEmitter {
   constructor(sessionManager) {
@@ -18,12 +20,137 @@ class RalphLoop extends EventEmitter {
     this.sessionManager = sessionManager;
     this.activeLoops = new Map(); // sessionName -> loopState
     this.detectionIntervals = new Map(); // sessionName -> interval
+    this.botConfig = null; // Will be set via setConfig
 
     // Detection settings
     this.detectionSettings = {
       method: 'both', // 'logs', 'status_file', 'both'
       interval: 60 // seconds
     };
+  }
+
+  // Set bot config reference for provider access
+  setConfig(botConfig) {
+    this.botConfig = botConfig;
+  }
+
+  // Check if LLM provider is configured
+  isProviderConfigured() {
+    if (!this.botConfig) return false;
+    const provider = this.botConfig.get('provider.name');
+    const apiKey = this.botConfig.get('provider.apiKey');
+    const baseUrl = this.botConfig.get('provider.baseUrl');
+    return !!(provider && apiKey && baseUrl);
+  }
+
+  // Get provider config
+  getProviderConfig() {
+    if (!this.botConfig) return null;
+    return {
+      provider: this.botConfig.get('provider.name'),
+      baseUrl: this.botConfig.get('provider.baseUrl'),
+      apiKey: this.botConfig.get('provider.apiKey'),
+      model: this.botConfig.get('provider.model') || 'gpt-4o-mini'
+    };
+  }
+
+  // Call LLM to analyze task completion status
+  async analyzeWithLLM(sessionName, logs, currentTask) {
+    const config = this.getProviderConfig();
+    if (!config) return null;
+
+    const prompt = `You are analyzing the output of an AI coding session to determine if a task has been completed.
+
+TASK: ${currentTask.title}
+${currentTask.description ? `DESCRIPTION: ${currentTask.description}` : ''}
+
+RECENT OUTPUT (last 100 lines):
+\`\`\`
+${logs}
+\`\`\`
+
+Analyze the output and determine the task status. Look for:
+- Successful git commits
+- Test results (passing/failing)
+- Error messages or failures
+- Completion signals like "DONE", "Task completed"
+- Evidence that the requested changes were made
+
+Respond with ONLY a JSON object (no markdown, no explanation):
+{"status": "completed" | "in_progress" | "error" | "blocked", "confidence": 0.0-1.0, "reason": "brief explanation"}`;
+
+    try {
+      const response = await this.callLLM(config, prompt);
+      if (!response) return null;
+
+      // Parse JSON response
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const result = JSON.parse(jsonMatch[0]);
+        console.log(`[Ralph] LLM analysis: ${result.status} (confidence: ${result.confidence}) - ${result.reason}`);
+        return result;
+      }
+    } catch (err) {
+      console.error(`[Ralph] LLM analysis error: ${err.message}`);
+    }
+
+    return null;
+  }
+
+  // Make HTTP request to LLM provider
+  callLLM(config, prompt) {
+    return new Promise((resolve, reject) => {
+      const url = new URL(config.baseUrl + '/chat/completions');
+      const protocol = url.protocol === 'https:' ? https : http;
+
+      const body = JSON.stringify({
+        model: config.model,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 200,
+        temperature: 0.1
+      });
+
+      const options = {
+        hostname: url.hostname,
+        port: url.port || (url.protocol === 'https:' ? 443 : 80),
+        path: url.pathname,
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + config.apiKey,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body)
+        },
+        timeout: 30000
+      };
+
+      const request = protocol.request(options, (response) => {
+        let data = '';
+        response.on('data', chunk => data += chunk);
+        response.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+            if (json.choices && json.choices[0] && json.choices[0].message) {
+              resolve(json.choices[0].message.content);
+            } else if (json.error) {
+              reject(new Error(json.error.message || 'API error'));
+            } else {
+              resolve(null);
+            }
+          } catch (e) {
+            reject(new Error('Failed to parse LLM response'));
+          }
+        });
+      });
+
+      request.on('error', reject);
+      request.on('timeout', () => {
+        request.destroy();
+        reject(new Error('Request timed out'));
+      });
+
+      request.write(body);
+      request.end();
+    });
   }
 
   // Update detection settings
@@ -76,32 +203,105 @@ class RalphLoop extends EventEmitter {
     const state = this.getLoopState(sessionName);
     if (!state || state.status !== 'running') return;
 
+    const currentTask = this.sessionManager.getCurrentTask(sessionName);
+    if (!currentTask) return;
+
     const method = this.detectionSettings.method;
 
+    // Always check status file first (most reliable)
     let statusFileComplete = false;
-    let logComplete = false;
-
-    // Check status file if enabled
     if (method === 'status_file' || method === 'both') {
       statusFileComplete = await this.checkStatusFile(sessionName);
     }
 
-    // Check logs if enabled
-    if (method === 'logs' || method === 'both') {
-      logComplete = await this.checkLogs(sessionName);
-    }
-
-    // Determine if task is complete
-    const isComplete = statusFileComplete || logComplete;
-
-    if (isComplete) {
-      console.log(`[Ralph] Task completion detected for ${sessionName} (status_file: ${statusFileComplete}, logs: ${logComplete})`);
-
-      // Process completion
+    if (statusFileComplete) {
+      console.log(`[Ralph] Task completion detected via status file for ${sessionName}`);
       this.processTaskCompletion(sessionName, {
         completion: { isComplete: true },
         stuck: { isStuck: false, errors: [] }
       });
+      return;
+    }
+
+    // Check logs - use LLM if configured, otherwise pattern matching
+    if (method === 'logs' || method === 'both') {
+      const logs = this.sessionManager.getScrollbackContent(sessionName, 'latest');
+      if (!logs) return;
+
+      const recentLogs = logs.split('\n').slice(-100).join('\n');
+
+      if (this.isProviderConfigured()) {
+        // Use LLM for intelligent analysis
+        console.log(`[Ralph] Using LLM to analyze task status for ${sessionName}`);
+        const analysis = await this.analyzeWithLLM(sessionName, recentLogs, currentTask);
+
+        if (analysis && analysis.confidence >= 0.7) {
+          if (analysis.status === 'completed') {
+            console.log(`[Ralph] LLM detected task completion for ${sessionName}`);
+
+            // Update status file with LLM analysis
+            this.writeStatusFile(sessionName, currentTask, analysis);
+
+            this.processTaskCompletion(sessionName, {
+              completion: { isComplete: true },
+              stuck: { isStuck: false, errors: [] }
+            });
+            return;
+          } else if (analysis.status === 'error' || analysis.status === 'blocked') {
+            console.log(`[Ralph] LLM detected task ${analysis.status} for ${sessionName}: ${analysis.reason}`);
+            state.circuitBreaker.noProgressCount++;
+            this.checkCircuitBreaker(sessionName, state);
+            return;
+          }
+          // If in_progress, just continue waiting
+        }
+      } else {
+        // Fall back to pattern-based detection
+        const logComplete = await this.checkLogsPattern(recentLogs);
+
+        if (logComplete) {
+          console.log(`[Ralph] Pattern-based completion detected for ${sessionName}`);
+          this.processTaskCompletion(sessionName, {
+            completion: { isComplete: true },
+            stuck: { isStuck: false, errors: [] }
+          });
+        }
+      }
+    }
+  }
+
+  // Write status file after LLM detection
+  writeStatusFile(sessionName, task, analysis) {
+    try {
+      const session = this.sessionManager.get(sessionName);
+      if (!session) return;
+
+      const statusDir = path.join(session.projectPath, '.ralph');
+      const statusPath = path.join(statusDir, 'status.json');
+
+      if (!fs.existsSync(statusDir)) {
+        fs.mkdirSync(statusDir, { recursive: true });
+      }
+
+      const status = {
+        version: '1.0',
+        status: 'completed',
+        task: task.id,
+        progress: 100,
+        currentStep: 'Detected complete by LLM',
+        timestamp: new Date().toISOString(),
+        result: {
+          success: true,
+          message: analysis.reason,
+          detectedBy: 'llm',
+          confidence: analysis.confidence
+        }
+      };
+
+      fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
+      console.log(`[Ralph] Wrote status file for ${sessionName}`);
+    } catch (err) {
+      console.error(`[Ralph] Failed to write status file: ${err.message}`);
     }
   }
 
@@ -123,15 +323,13 @@ class RalphLoop extends EventEmitter {
     }
   }
 
-  // Check logs for completion signals
-  async checkLogs(sessionName) {
+  // Pattern-based log checking (used when no LLM provider configured)
+  async checkLogsPattern(logsContent) {
     try {
-      const logs = this.sessionManager.getScrollbackContent(sessionName, 'latest');
-      if (!logs) return false;
+      if (!logsContent) return false;
 
-      // Get last 100 lines
-      const lines = logs.split('\n').slice(-100);
-      const recentContent = lines.join('\n').toLowerCase();
+      const lines = logsContent.split('\n');
+      const recentContent = logsContent.toLowerCase();
 
       // Check for completion signals
       const completionSignals = [
@@ -142,15 +340,14 @@ class RalphLoop extends EventEmitter {
         'all tasks complete',
         'verified and committed',
         'commit hash:',
-        'successfully committed',
-        'git commit -m'
+        'successfully committed'
       ];
 
       // Check for any completion signal
       for (const signal of completionSignals) {
         if (recentContent.includes(signal)) {
           // Verify it's recent (check if git commit was made)
-          if (this.verifyRecentCompletion(sessionName, lines)) {
+          if (this.verifyRecentCompletion(lines)) {
             return true;
           }
         }
@@ -158,13 +355,13 @@ class RalphLoop extends EventEmitter {
 
       return false;
     } catch (err) {
-      console.error(`[Ralph] Error checking logs for ${sessionName}:`, err.message);
+      console.error(`[Ralph] Error in pattern-based log check:`, err.message);
       return false;
     }
   }
 
   // Verify the completion signal is recent and valid
-  verifyRecentCompletion(sessionName, lines) {
+  verifyRecentCompletion(lines) {
     // Look for git commit in recent output
     const recentLines = lines.slice(-30).join('\n');
 

@@ -129,7 +129,10 @@ const activeAttachments = new Map(); // sessionName -> Set<ws>
 
 // Initialize bot service (Discord + Telegram)
 let botService = new BotService(sessionManager, ralphLoop, gpuMonitor);
-botService.initialize().catch(err => {
+botService.initialize().then(() => {
+  // Pass bot config to ralph loop for LLM-based detection
+  ralphLoop.setConfig(botService.config);
+}).catch(err => {
   console.error('[BotService] Failed to initialize:', err);
 });
 
@@ -140,6 +143,8 @@ async function restartBotService() {
   }
   botService = new BotService(sessionManager, ralphLoop, gpuMonitor);
   await botService.initialize();
+  // Pass bot config to ralph loop for LLM-based detection
+  ralphLoop.setConfig(botService.config);
   return botService;
 }
 
