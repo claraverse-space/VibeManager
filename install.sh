@@ -19,19 +19,19 @@ DATA_DIR="${VIBEMANAGER_DATA_DIR:-$HOME/.local/share/vibemanager}"
 
 # Logging functions
 info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    printf "${BLUE}[INFO]${NC} %s\n" "$1"
 }
 
 success() {
-    echo -e "${GREEN}[OK]${NC} $1"
+    printf "${GREEN}[OK]${NC} %s\n" "$1"
 }
 
 warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    printf "${YELLOW}[WARN]${NC} %s\n" "$1"
 }
 
 error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    printf "${RED}[ERROR]${NC} %s\n" "$1"
     exit 1
 }
 
@@ -254,37 +254,37 @@ update_path() {
 
 # Print completion message
 print_completion() {
-    echo ""
-    echo -e "${GREEN}============================================${NC}"
-    echo -e "${GREEN}  VibeManager installed successfully!${NC}"
-    echo -e "${GREEN}============================================${NC}"
-    echo ""
-    echo "Get started:"
-    echo ""
-    echo "  1. Initialize VibeManager:"
-    echo -e "     ${BLUE}vibemanager init${NC}"
-    echo ""
-    echo "  2. Start the server:"
-    echo -e "     ${BLUE}vibemanager start${NC}"
-    echo ""
-    echo "  3. Check status:"
-    echo -e "     ${BLUE}vibemanager status${NC}"
-    echo ""
-    echo "For remote access, use Tailscale, Cloudflare Tunnel,"
-    echo "ngrok, or any tunneling service of your choice."
-    echo ""
-    echo "Documentation: https://github.com/${REPO}#readme"
-    echo ""
+    printf "\n"
+    printf "${GREEN}============================================${NC}\n"
+    printf "${GREEN}  VibeManager installed successfully!${NC}\n"
+    printf "${GREEN}============================================${NC}\n"
+    printf "\n"
+    printf "Get started:\n"
+    printf "\n"
+    printf "  1. Initialize VibeManager:\n"
+    printf "     ${BLUE}vibemanager init${NC}\n"
+    printf "\n"
+    printf "  2. Start the server:\n"
+    printf "     ${BLUE}vibemanager start${NC}\n"
+    printf "\n"
+    printf "  3. Check status:\n"
+    printf "     ${BLUE}vibemanager status${NC}\n"
+    printf "\n"
+    printf "For remote access, use Tailscale, Cloudflare Tunnel,\n"
+    printf "ngrok, or any tunneling service of your choice.\n"
+    printf "\n"
+    printf "Documentation: https://github.com/%s#readme\n" "${REPO}"
+    printf "\n"
 }
 
 # Main installation flow
 main() {
-    echo ""
-    echo -e "${BLUE}╔════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║       VibeManager Installer                ║${NC}"
-    echo -e "${BLUE}║   AI-Powered Development Environment       ║${NC}"
-    echo -e "${BLUE}╚════════════════════════════════════════════╝${NC}"
-    echo ""
+    printf "\n"
+    printf "${BLUE}╔════════════════════════════════════════════╗${NC}\n"
+    printf "${BLUE}║       VibeManager Installer                ║${NC}\n"
+    printf "${BLUE}║   AI-Powered Development Environment       ║${NC}\n"
+    printf "${BLUE}╚════════════════════════════════════════════╝${NC}\n"
+    printf "\n"
 
     detect_platform
     check_dependencies
