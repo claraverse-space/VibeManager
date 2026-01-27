@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bot Settings - VibeManager</title>
+    <title>Telegram Bot Settings - VibeManager</title>
     <style>
         * {
             margin: 0;
@@ -280,9 +280,14 @@
             color: var(--danger);
         }
 
-        .connection-status.pending {
+        .connection-status.reconnecting {
             background: rgba(245, 158, 11, 0.15);
             color: var(--warn);
+        }
+
+        .connection-status.connecting {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent);
         }
 
         .config-indicator {
@@ -296,10 +301,18 @@
             display: block;
         }
 
-        .loading {
-            text-align: center;
-            padding: 20px;
-            color: var(--text-dim);
+        .info-box {
+            background: var(--accent-dim);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: var(--text);
+        }
+
+        .info-box strong {
+            color: var(--accent);
         }
     </style>
 </head>
@@ -308,8 +321,12 @@
         <a href="/" class="back-link">← Back to Dashboard</a>
 
         <div class="header">
-            <h1>🤖 Bot Settings</h1>
-            <p>Configure Discord and Telegram bots to control VibeManager from your phone</p>
+            <h1>📱 Telegram Bot Settings</h1>
+            <p>Control VibeManager from your phone using Telegram</p>
+        </div>
+
+        <div class="info-box">
+            <strong>✨ New: Ultra-Robust Connection</strong> - The bot now automatically reconnects if your internet goes out, with intelligent retry logic and health monitoring.
         </div>
 
         <!-- Telegram Bot Settings -->
@@ -375,71 +392,6 @@
                 </button>
             </div>
         </div>
-
-        <!-- Discord Bot Settings -->
-        <div class="card">
-            <h2>
-                💬 Discord Bot
-                <span id="discord-status" class="connection-status disconnected">Not Configured</span>
-            </h2>
-
-            <div id="discord-error" class="status error" style="display:none;">
-                <span>❌</span>
-                <span id="discord-error-text"></span>
-            </div>
-
-            <div id="discord-success" class="status success" style="display:none;">
-                <span>✅</span>
-                <span id="discord-success-text"></span>
-            </div>
-
-            <div class="steps">
-                <h3>How to get your Discord bot token:</h3>
-                <ol>
-                    <li>Go to <a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a></li>
-                    <li>Create a new application → Add Bot</li>
-                    <li>Enable "MESSAGE CONTENT INTENT" (important!)</li>
-                    <li>Copy the bot token</li>
-                    <li>Enable Developer Mode in Discord settings → Right-click your name → Copy User ID</li>
-                    <li>Paste both below and click "Save & Test"</li>
-                </ol>
-            </div>
-
-            <div class="form-group">
-                <label for="discord-token">Bot Token</label>
-                <input
-                    type="text"
-                    id="discord-token"
-                    placeholder="MTQ2NTU0NDcxNTUyMzg1NDM4Nw.GcIoOs.xyz123..."
-                    autocomplete="off"
-                    spellcheck="false"
-                >
-                <div class="hint">Get from <a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a></div>
-                <div id="discord-token-indicator" class="config-indicator">✓ Token configured</div>
-            </div>
-
-            <div class="form-group">
-                <label for="discord-users">Your Discord User ID</label>
-                <input
-                    type="text"
-                    id="discord-users"
-                    placeholder="123456789012345678"
-                    autocomplete="off"
-                    spellcheck="false"
-                >
-                <div class="hint">Right-click your username in Discord → Copy User ID (enable Developer Mode first)</div>
-                <div id="discord-users-indicator" class="config-indicator">✓ Users configured</div>
-            </div>
-
-            <div class="button-group">
-                <button class="btn btn-primary" id="save-discord" onclick="saveDiscordBot()">
-                    💾 Save & Test Connection
-                </button>
-                <button class="btn btn-secondary" id="clear-discord" onclick="clearDiscordBot()">
-                    🗑️ Clear
-                </button>
-            </div>
-        </div>
     </div>
 
     <script>
@@ -447,6 +399,9 @@
         document.addEventListener('DOMContentLoaded', async () => {
             await loadBotConfig();
             await updateBotStatus();
+
+            // Poll status every 5 seconds
+            setInterval(updateBotStatus, 5000);
         });
 
         async function loadBotConfig() {
@@ -466,19 +421,6 @@
                         document.getElementById('telegram-users-indicator').classList.add('active');
                     }
                 }
-
-                // Load Discord config
-                if (config.discord) {
-                    if (config.discord.token) {
-                        document.getElementById('discord-token').value = config.discord.token;
-                        document.getElementById('discord-token').placeholder = 'Token configured (shown masked)';
-                        document.getElementById('discord-token-indicator').classList.add('active');
-                    }
-                    if (config.discord.allowedUsers && config.discord.allowedUsers.length > 0) {
-                        document.getElementById('discord-users').value = config.discord.allowedUsers.join(', ');
-                        document.getElementById('discord-users-indicator').classList.add('active');
-                    }
-                }
             } catch (err) {
                 console.error('Failed to load bot config:', err);
             }
@@ -491,23 +433,18 @@
 
                 // Update Telegram status
                 if (status.telegram) {
-                    if (status.telegram.enabled && status.telegram.connected) {
-                        updateTelegramStatus('connected', 'Connected');
+                    const state = status.telegram.connectionState || 'disconnected';
+
+                    if (status.telegram.connected) {
+                        updateTelegramStatus('connected', '✓ Connected');
+                    } else if (state === 'connecting') {
+                        updateTelegramStatus('connecting', '⟳ Connecting...');
+                    } else if (state === 'reconnecting') {
+                        updateTelegramStatus('reconnecting', '⟳ Reconnecting...');
                     } else if (status.telegram.enabled) {
-                        updateTelegramStatus('pending', 'Enabled');
+                        updateTelegramStatus('disconnected', '⚠ Configured');
                     } else {
                         updateTelegramStatus('disconnected', 'Not Configured');
-                    }
-                }
-
-                // Update Discord status
-                if (status.discord) {
-                    if (status.discord.enabled && status.discord.connected) {
-                        updateDiscordStatus('connected', 'Connected');
-                    } else if (status.discord.enabled) {
-                        updateDiscordStatus('pending', 'Enabled');
-                    } else {
-                        updateDiscordStatus('disconnected', 'Not Configured');
                     }
                 }
             } catch (err) {
@@ -542,61 +479,17 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    updateTelegramStatus('connected', 'Connected');
+                    updateTelegramStatus('connected', '✓ Connected');
                     showTelegramSuccess(result.message || 'Bot configured successfully! Check your Telegram for a test message.');
                     document.getElementById('telegram-token-indicator').classList.add('active');
                     document.getElementById('telegram-users-indicator').classList.add('active');
                 } else {
-                    updateTelegramStatus('disconnected', 'Error');
+                    updateTelegramStatus('disconnected', '⚠ Error');
                     showTelegramError(result.error || 'Failed to configure bot');
                 }
             } catch (err) {
                 showTelegramError('Connection error: ' + err.message);
-                updateTelegramStatus('disconnected', 'Error');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '💾 Save & Test Connection';
-            }
-        }
-
-        async function saveDiscordBot() {
-            const token = document.getElementById('discord-token').value.trim();
-            const users = document.getElementById('discord-users').value.trim();
-
-            if (!token || !users) {
-                showDiscordError('Please fill in both fields');
-                return;
-            }
-
-            const btn = document.getElementById('save-discord');
-            btn.disabled = true;
-            btn.textContent = 'Testing...';
-
-            try {
-                const response = await fetch('/api/bot/configure', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        platform: 'discord',
-                        token: token,
-                        allowedUsers: users.split(',').map(u => u.trim()).filter(Boolean)
-                    })
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    updateDiscordStatus('connected', 'Connected');
-                    showDiscordSuccess(result.message || 'Bot configured successfully! Check your Discord DMs for a test message.');
-                    document.getElementById('discord-token-indicator').classList.add('active');
-                    document.getElementById('discord-users-indicator').classList.add('active');
-                } else {
-                    updateDiscordStatus('disconnected', 'Error');
-                    showDiscordError(result.error || 'Failed to configure bot');
-                }
-            } catch (err) {
-                showDiscordError('Connection error: ' + err.message);
-                updateDiscordStatus('disconnected', 'Error');
+                updateTelegramStatus('disconnected', '⚠ Error');
             } finally {
                 btn.disabled = false;
                 btn.textContent = '💾 Save & Test Connection';
@@ -613,24 +506,8 @@
             document.getElementById('telegram-users-indicator').classList.remove('active');
         }
 
-        function clearDiscordBot() {
-            document.getElementById('discord-token').value = '';
-            document.getElementById('discord-users').value = '';
-            document.getElementById('discord-token').placeholder = 'MTQ2NTU0NDcxNTUyMzg1NDM4Nw.GcIoOs.xyz123...';
-            updateDiscordStatus('disconnected', 'Not Configured');
-            hideDiscordMessages();
-            document.getElementById('discord-token-indicator').classList.remove('active');
-            document.getElementById('discord-users-indicator').classList.remove('active');
-        }
-
         function updateTelegramStatus(status, text) {
             const elem = document.getElementById('telegram-status');
-            elem.className = 'connection-status ' + status;
-            elem.textContent = text;
-        }
-
-        function updateDiscordStatus(status, text) {
-            const elem = document.getElementById('discord-status');
             elem.className = 'connection-status ' + status;
             elem.textContent = text;
         }
@@ -650,23 +527,6 @@
         function hideTelegramMessages() {
             document.getElementById('telegram-success').style.display = 'none';
             document.getElementById('telegram-error').style.display = 'none';
-        }
-
-        function showDiscordSuccess(msg) {
-            hideDiscordMessages();
-            document.getElementById('discord-success').style.display = 'flex';
-            document.getElementById('discord-success-text').textContent = msg;
-        }
-
-        function showDiscordError(msg) {
-            hideDiscordMessages();
-            document.getElementById('discord-error').style.display = 'flex';
-            document.getElementById('discord-error-text').textContent = msg;
-        }
-
-        function hideDiscordMessages() {
-            document.getElementById('discord-success').style.display = 'none';
-            document.getElementById('discord-error').style.display = 'none';
         }
     </script>
 </body>

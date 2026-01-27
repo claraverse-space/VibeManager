@@ -1195,36 +1195,26 @@ app.get('/api/gpu/monitors', (req, res) => {
 
 // --- Bot Configuration APIs ---
 
-// Get current bot configuration
+// Get current bot configuration (Telegram only)
 app.get('/api/bot/config', (req, res) => {
   const config = botService.config.config;
   res.json({
     telegram: {
       token: config.telegram.token ? '***' + config.telegram.token.slice(-10) : '',
       allowedUsers: config.telegram.allowedUsers
-    },
-    discord: {
-      token: config.discord.token ? '***' + config.discord.token.slice(-10) : '',
-      allowedUsers: config.discord.allowedUsers
     }
   });
 });
 
-// Get bot connection status
+// Get bot connection status (Telegram only)
 app.get('/api/bot/status', (req, res) => {
+  const status = botService.getStatus();
   res.json({
-    telegram: {
-      connected: botService.telegram?.ready || false,
-      enabled: botService.config.isTelegramEnabled()
-    },
-    discord: {
-      connected: botService.discord?.ready || false,
-      enabled: botService.config.isDiscordEnabled()
-    }
+    telegram: status.telegram
   });
 });
 
-// Configure and test bot
+// Configure and test Telegram bot
 app.post('/api/bot/configure', async (req, res) => {
   const { platform, token, allowedUsers } = req.body;
 
@@ -1235,55 +1225,42 @@ app.post('/api/bot/configure', async (req, res) => {
     });
   }
 
+  if (platform !== 'telegram') {
+    return res.status(400).json({
+      success: false,
+      error: 'Only Telegram platform is supported'
+    });
+  }
+
   try {
     // Save to config
-    if (platform === 'telegram') {
-      botService.config.set('telegram.enabled', true);
-      botService.config.set('telegram.token', token);
-      botService.config.set('telegram.allowedUsers', allowedUsers);
+    botService.config.set('telegram.enabled', true);
+    botService.config.set('telegram.token', token);
+    botService.config.set('telegram.allowedUsers', allowedUsers);
 
-      // Set environment variables
-      process.env.TELEGRAM_BOT_TOKEN = token;
-      process.env.TELEGRAM_ALLOWED_USERS = allowedUsers.join(',');
-    } else if (platform === 'discord') {
-      botService.config.set('discord.enabled', true);
-      botService.config.set('discord.token', token);
-      botService.config.set('discord.allowedUsers', allowedUsers);
-
-      // Set environment variables
-      process.env.DISCORD_BOT_TOKEN = token;
-      process.env.DISCORD_ALLOWED_USERS = allowedUsers.join(',');
-    } else {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid platform'
-      });
-    }
+    // Set environment variables
+    process.env.TELEGRAM_BOT_TOKEN = token;
+    process.env.TELEGRAM_ALLOWED_USERS = allowedUsers.join(',');
 
     // Restart bot service with new config
-    console.log(`[BotService] Restarting ${platform} bot...`);
+    console.log('[BotService] Restarting Telegram bot...');
     await restartBotService();
 
-    // Wait a bit for connection
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Wait for connection (up to 10 seconds)
+    let attempts = 0;
+    while (attempts < 20 && !botService.telegram?.ready) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      attempts++;
+    }
 
     // Send test message to user
     const userId = allowedUsers[0];
     let testSent = false;
 
-    if (platform === 'telegram' && botService.telegram?.ready) {
+    if (botService.telegram?.ready) {
       try {
         await botService.telegram.sendNotification(userId, {
           text: '🎉 VibeManager Bot Connected!\n\nYour Telegram bot is now configured and ready to use.\n\nTry these commands:\n/help - See all commands\n/list - List sessions\n/create my-test - Create a test session'
-        });
-        testSent = true;
-      } catch (err) {
-        console.error('[Bot] Failed to send test message:', err.message);
-      }
-    } else if (platform === 'discord' && botService.discord?.ready) {
-      try {
-        await botService.discord.sendNotification(userId, {
-          text: '🎉 VibeManager Bot Connected!\n\nYour Discord bot is now configured and ready to use.\n\nTry these commands:\n/help - See all commands\n/list - List sessions\n/create my-test - Create a test session'
         });
         testSent = true;
       } catch (err) {
@@ -1294,12 +1271,12 @@ app.post('/api/bot/configure', async (req, res) => {
     if (testSent) {
       res.json({
         success: true,
-        message: `✅ Bot configured successfully! Check your ${platform} for a test message.`
+        message: '✅ Bot configured successfully! Check your Telegram for a test message.'
       });
     } else {
       res.json({
         success: true,
-        message: `⚠️ Bot configured but test message failed. Check the bot token and try /help in ${platform}.`
+        message: '⚠️ Bot is connecting... It may take a moment for the connection to establish. Try /help in Telegram.'
       });
     }
   } catch (err) {

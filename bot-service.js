@@ -1,9 +1,8 @@
-// bot-service.js - Main bot service orchestrator
+// bot-service.js - Telegram bot service orchestrator (Discord removed)
 const EventEmitter = require('events');
 const BotConfig = require('./bot-config');
 const BotParser = require('./bot-parser');
 const BotFormatter = require('./bot-formatter');
-const DiscordClient = require('./discord-client');
 const TelegramClient = require('./telegram-client');
 
 class BotService extends EventEmitter {
@@ -16,7 +15,6 @@ class BotService extends EventEmitter {
     this.parser = new BotParser();
     this.formatter = new BotFormatter();
 
-    this.discord = null;
     this.telegram = null;
 
     // Track user subscriptions for notifications
@@ -24,18 +22,27 @@ class BotService extends EventEmitter {
   }
 
   async initialize() {
-    console.log('[BotService] Initializing...');
+    console.log('[BotService] Initializing Telegram bot...');
 
-    // Initialize Discord
-    if (this.config.isDiscordEnabled()) {
-      this.discord = new DiscordClient(this.config, this);
-      await this.discord.connect();
-    }
-
-    // Initialize Telegram
+    // Initialize Telegram with robust connection
     if (this.config.isTelegramEnabled()) {
       this.telegram = new TelegramClient(this.config, this);
+
+      // Listen for connection events
+      this.telegram.on('ready', () => {
+        console.log('[BotService] Telegram bot is ready');
+        this.emit('telegram:ready');
+      });
+
+      this.telegram.on('error', (err) => {
+        console.error('[BotService] Telegram error:', err.message);
+        this.emit('telegram:error', err);
+      });
+
+      // Initial connection (will auto-reconnect if fails)
       await this.telegram.connect();
+    } else {
+      console.log('[BotService] Telegram bot not configured');
     }
 
     // Subscribe to VibeManager events
@@ -493,9 +500,7 @@ class BotService extends EventEmitter {
       const { platform, userId } = JSON.parse(subStr);
 
       try {
-        if (platform === 'discord' && this.discord) {
-          await this.discord.sendNotification(userId, message);
-        } else if (platform === 'telegram' && this.telegram) {
+        if (platform === 'telegram' && this.telegram) {
           await this.telegram.sendNotification(userId, message);
         }
       } catch (err) {
@@ -504,12 +509,18 @@ class BotService extends EventEmitter {
     }
   }
 
+  getStatus() {
+    return {
+      telegram: this.telegram ? this.telegram.getStatus() : {
+        connected: false,
+        enabled: false,
+        connectionState: 'not_initialized'
+      }
+    };
+  }
+
   async shutdown() {
     console.log('[BotService] Shutting down...');
-
-    if (this.discord) {
-      this.discord.disconnect();
-    }
 
     if (this.telegram) {
       this.telegram.disconnect();

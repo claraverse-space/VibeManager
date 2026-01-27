@@ -1,4 +1,4 @@
-// bot-config.js - Bot configuration and settings
+// bot-config.js - Bot configuration (Telegram only)
 const fs = require('fs');
 const path = require('path');
 
@@ -17,14 +17,8 @@ class BotConfig {
       console.error('[BotConfig] Failed to load config:', err.message);
     }
 
-    // Default config
+    // Default config - Telegram only
     return {
-      discord: {
-        enabled: !!process.env.DISCORD_BOT_TOKEN,
-        token: process.env.DISCORD_BOT_TOKEN || '',
-        allowedUsers: this.parseUserList(process.env.DISCORD_ALLOWED_USERS || ''),
-        commandPrefix: '/'
-      },
       telegram: {
         enabled: !!process.env.TELEGRAM_BOT_TOKEN,
         token: process.env.TELEGRAM_BOT_TOKEN || '',
@@ -80,10 +74,6 @@ class BotConfig {
     }
     obj[keys[keys.length - 1]] = value;
     this.save();
-  }
-
-  isDiscordEnabled() {
-    return !!(this.config.discord.enabled && this.config.discord.token);
   }
 
   isTelegramEnabled() {
