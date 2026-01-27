@@ -1,6 +1,6 @@
 #!/bin/bash
 # VibeManager Installer Script
-# Usage: curl -fsSL https://get.vibemanager.app | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash
 
 set -e
 
