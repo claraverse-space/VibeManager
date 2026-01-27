@@ -1,0 +1,110 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - bun-linux-x64
+          - bun-linux-arm64
+          - bun-darwin-x64
+          - bun-darwin-arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build frontend
+        run: bun run --filter @vibemanager/web build
+
+      - name: Copy frontend to server
+        run: |
+          mkdir -p apps/server/public
+          cp -r apps/web/dist/* apps/server/public/
+
+      - name: Build binary
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          OS=$(echo "$TARGET" | cut -d'-' -f2)
+          ARCH=$(echo "$TARGET" | cut -d'-' -f3)
+          OUTPUT="vibemanager-${OS}-${ARCH}"
+
+          bun build apps/server/src/index.ts \
+            --compile \
+            --target="$TARGET" \
+            --outfile="dist/$OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibemanager-${{ matrix.target }}
+          path: dist/vibemanager-*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List files
+        run: ls -la dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        env:
+          RELEASE_VERSION: ${{ github.event.inputs.version || github.ref_name }}
+        with:
+          tag_name: ${{ github.event.inputs.version || github.ref_name }}
+          name: Release ${{ github.event.inputs.version || github.ref_name }}
+          draft: false
+          prerelease: false
+          files: dist/*
+          body: |
+            ## Installation
+
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash
+            ```
+
+            Then run:
+            ```bash
+            vibemanager init
+            ```
+
+            ## What's included
+            - Pre-built binaries for Linux and macOS (x64 and ARM64)
+            - Auto-installer that handles all dependencies
+
+            ## Manual download
+            Download the binary for your platform and make it executable:
+            ```bash
+            chmod +x vibemanager-*
+            ./vibemanager-linux-x64 --help
+            ```

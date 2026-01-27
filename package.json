@@ -21,7 +21,8 @@
     "db:migrate": "bun run apps/server/src/db/migrate.ts",
     "typecheck": "tsc --noEmit",
     "cli": "bun run cli/src/index.ts",
-    "cli:build": "bun build cli/src/index.ts --compile --outfile dist/vibemanager"
+    "cli:build": "bun build cli/src/index.ts --compile --outfile dist/vibemanager",
+    "build:release": "bun run scripts/build.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.2.4",

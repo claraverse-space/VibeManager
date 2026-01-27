@@ -1,23 +1,14 @@
 #!/bin/bash
 # VibeManager Installer Script
 # Usage: curl -fsSL https://raw.githubusercontent.com/claraverse-space/VibeManager/master/install.sh | bash
+#
+# This installer automatically:
+# - Installs all dependencies (bun, tmux, git)
+# - Downloads pre-built binary or builds from source
+# - Configures PATH
+# - Just works™
 
 set -e
-
-# Colors for output (using tput for portability)
-if [ -t 1 ]; then
-    RED=$(tput setaf 1)
-    GREEN=$(tput setaf 2)
-    YELLOW=$(tput setaf 3)
-    BLUE=$(tput setaf 4)
-    NC=$(tput sgr0)
-else
-    RED=""
-    GREEN=""
-    YELLOW=""
-    BLUE=""
-    NC=""
-fi
 
 # Configuration
 REPO="claraverse-space/VibeManager"
@@ -25,282 +16,316 @@ VERSION="${VIBEMANAGER_VERSION:-latest}"
 INSTALL_DIR="${VIBEMANAGER_INSTALL_DIR:-$HOME/.local/bin}"
 DATA_DIR="${VIBEMANAGER_DATA_DIR:-$HOME/.local/share/vibemanager}"
 
-# Logging functions
-info() {
-    printf "${BLUE}[INFO]${NC} %s\n" "$1"
+# Colors (set up safely)
+setup_colors() {
+    if [ -t 1 ] && command -v tput &> /dev/null; then
+        RED=$(tput setaf 1 2>/dev/null) || RED=""
+        GREEN=$(tput setaf 2 2>/dev/null) || GREEN=""
+        YELLOW=$(tput setaf 3 2>/dev/null) || YELLOW=""
+        BLUE=$(tput setaf 4 2>/dev/null) || BLUE=""
+        BOLD=$(tput bold 2>/dev/null) || BOLD=""
+        NC=$(tput sgr0 2>/dev/null) || NC=""
+    else
+        RED="" GREEN="" YELLOW="" BLUE="" BOLD="" NC=""
+    fi
 }
 
-success() {
-    printf "${GREEN}[OK]${NC} %s\n" "$1"
-}
-
-warn() {
-    printf "${YELLOW}[WARN]${NC} %s\n" "$1"
-}
-
-error() {
-    printf "${RED}[ERROR]${NC} %s\n" "$1"
-    exit 1
-}
+# Logging
+info()    { printf "${BLUE}[INFO]${NC} %s\n" "$1"; }
+success() { printf "${GREEN}[OK]${NC} %s\n" "$1"; }
+warn()    { printf "${YELLOW}[WARN]${NC} %s\n" "$1"; }
+error()   { printf "${RED}[ERROR]${NC} %s\n" "$1"; exit 1; }
+step()    { printf "\n${BOLD}==> %s${NC}\n" "$1"; }
 
 # Detect OS and architecture
 detect_platform() {
-    OS="$(uname -s)"
+    OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
     ARCH="$(uname -m)"
 
     case "$OS" in
-        Linux)
-            OS="linux"
-            ;;
-        Darwin)
-            OS="darwin"
-            ;;
-        *)
-            error "Unsupported operating system: $OS"
-            ;;
+        linux|darwin) ;;
+        *) error "Unsupported OS: $OS" ;;
     esac
 
     case "$ARCH" in
-        x86_64|amd64)
-            ARCH="x64"
-            ;;
-        arm64|aarch64)
-            ARCH="arm64"
-            ;;
-        *)
-            error "Unsupported architecture: $ARCH"
-            ;;
+        x86_64|amd64) ARCH="x64" ;;
+        arm64|aarch64) ARCH="arm64" ;;
+        *) error "Unsupported architecture: $ARCH" ;;
     esac
 
     PLATFORM="${OS}-${ARCH}"
-    info "Detected platform: $PLATFORM"
 }
 
-# Check for required dependencies
-check_dependencies() {
-    info "Checking dependencies..."
-
-    # Check for bun
-    if ! command -v bun &> /dev/null; then
-        warn "Bun is not installed"
-        echo ""
-        echo "Bun is required to run VibeManager. Install it with:"
-        echo "  curl -fsSL https://bun.sh/install | bash"
-        echo ""
-        read -p "Would you like to install Bun now? [y/N] " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            info "Installing Bun..."
-            curl -fsSL https://bun.sh/install | bash
-            # Source the updated profile
-            export BUN_INSTALL="$HOME/.bun"
-            export PATH="$BUN_INSTALL/bin:$PATH"
-            success "Bun installed successfully"
-        else
-            error "Bun is required. Please install it and try again."
-        fi
+# Detect package manager
+get_pkg_manager() {
+    if [ "$OS" = "darwin" ]; then
+        echo "brew"
+    elif command -v apt-get &>/dev/null; then
+        echo "apt"
+    elif command -v dnf &>/dev/null; then
+        echo "dnf"
+    elif command -v yum &>/dev/null; then
+        echo "yum"
+    elif command -v pacman &>/dev/null; then
+        echo "pacman"
+    elif command -v apk &>/dev/null; then
+        echo "apk"
+    elif command -v zypper &>/dev/null; then
+        echo "zypper"
     else
-        success "Bun is installed: $(bun --version)"
+        echo "unknown"
+    fi
+}
+
+# Install package using system package manager
+install_pkg() {
+    local pkg="$1"
+    local mgr
+    mgr=$(get_pkg_manager)
+
+    info "Installing $pkg..."
+
+    case "$mgr" in
+        brew)
+            if ! command -v brew &>/dev/null; then
+                info "Installing Homebrew first..."
+                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            fi
+            brew install "$pkg"
+            ;;
+        apt)
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq "$pkg"
+            ;;
+        dnf)
+            sudo dnf install -y -q "$pkg"
+            ;;
+        yum)
+            sudo yum install -y -q "$pkg"
+            ;;
+        pacman)
+            sudo pacman -Sy --noconfirm "$pkg"
+            ;;
+        apk)
+            sudo apk add "$pkg"
+            ;;
+        zypper)
+            sudo zypper install -y "$pkg"
+            ;;
+        *)
+            error "Cannot auto-install $pkg. Please install it manually and re-run this script."
+            ;;
+    esac
+}
+
+# Install Bun runtime
+install_bun() {
+    if command -v bun &>/dev/null; then
+        success "Bun already installed: $(bun --version)"
+        return 0
     fi
 
-    # Check for tmux
-    if ! command -v tmux &> /dev/null; then
-        warn "tmux is not installed"
-        echo ""
-        echo "tmux is required for terminal session management."
-        echo ""
-        if [[ "$OS" == "linux" ]]; then
-            echo "Install with:"
-            echo "  Ubuntu/Debian: sudo apt install tmux"
-            echo "  Fedora: sudo dnf install tmux"
-            echo "  Arch: sudo pacman -S tmux"
-        elif [[ "$OS" == "darwin" ]]; then
-            echo "Install with: brew install tmux"
-        fi
-        echo ""
-        error "Please install tmux and try again."
+    step "Installing Bun runtime"
+    curl -fsSL https://bun.sh/install | bash
+
+    # Add to current session
+    export BUN_INSTALL="$HOME/.bun"
+    export PATH="$BUN_INSTALL/bin:$PATH"
+
+    if command -v bun &>/dev/null; then
+        success "Bun installed: $(bun --version)"
     else
-        success "tmux is installed: $(tmux -V)"
+        error "Failed to install Bun"
+    fi
+}
+
+# Install tmux
+install_tmux() {
+    if command -v tmux &>/dev/null; then
+        success "tmux already installed: $(tmux -V)"
+        return 0
     fi
 
-    # Optional: Check for code-server
-    if command -v code-server &> /dev/null; then
-        success "code-server is installed (optional): $(code-server --version | head -1)"
+    step "Installing tmux"
+    install_pkg tmux
+
+    if command -v tmux &>/dev/null; then
+        success "tmux installed: $(tmux -V)"
     else
-        info "code-server not found (optional - for integrated code editing)"
+        error "Failed to install tmux"
     fi
+}
+
+# Install git
+install_git() {
+    if command -v git &>/dev/null; then
+        return 0
+    fi
+
+    step "Installing git"
+    install_pkg git
 }
 
 # Create directories
 setup_directories() {
-    info "Setting up directories..."
-
-    # Create install directory
-    mkdir -p "$INSTALL_DIR"
-
-    # Create data directory
-    mkdir -p "$DATA_DIR"
-    mkdir -p "$DATA_DIR/logs"
-
-    success "Directories created"
+    mkdir -p "$INSTALL_DIR" "$DATA_DIR" "$DATA_DIR/logs"
 }
 
-# Download and install binary
-install_binary() {
-    info "Installing VibeManager..."
-
-    # For now, install from source using bun
-    # In production, this would download pre-built binaries
-
-    TEMP_DIR=$(mktemp -d)
-    trap "rm -rf $TEMP_DIR" EXIT
-
-    # Clone or download the repository
+# Try to download pre-built binary
+download_binary() {
+    local url
     if [ "$VERSION" = "latest" ]; then
-        DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/vibemanager-${PLATFORM}"
+        url="https://github.com/${REPO}/releases/latest/download/vibemanager-${PLATFORM}"
     else
-        DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/vibemanager-${PLATFORM}"
+        url="https://github.com/${REPO}/releases/download/${VERSION}/vibemanager-${PLATFORM}"
     fi
 
-    info "Downloading from: $DOWNLOAD_URL"
+    info "Checking for pre-built binary..."
 
-    # Try to download binary, fall back to source install
-    if curl -fsSL -o "$TEMP_DIR/vibemanager" "$DOWNLOAD_URL" 2>/dev/null; then
-        chmod +x "$TEMP_DIR/vibemanager"
-        mv "$TEMP_DIR/vibemanager" "$INSTALL_DIR/vibemanager"
-        success "Binary installed to $INSTALL_DIR/vibemanager"
-    else
-        warn "Pre-built binary not available, installing from source..."
-        install_from_source
+    if curl -fsSL -o "$INSTALL_DIR/vibemanager" "$url" 2>/dev/null; then
+        chmod +x "$INSTALL_DIR/vibemanager"
+        success "Downloaded pre-built binary"
+        return 0
     fi
+
+    return 1
 }
 
-# Install from source (fallback)
+# Install from source
 install_from_source() {
-    info "Installing from source..."
+    step "Installing from source"
 
-    # Clone repository
-    CLONE_DIR="$DATA_DIR/source"
+    install_git
+    install_bun
 
-    if [ -d "$CLONE_DIR" ]; then
-        info "Updating existing source..."
-        cd "$CLONE_DIR"
-        git pull --quiet
+    local src_dir="$DATA_DIR/source"
+
+    if [ -d "$src_dir/.git" ]; then
+        info "Updating existing installation..."
+        cd "$src_dir"
+        git fetch -q origin
+        git reset --hard origin/master -q
     else
-        info "Cloning repository..."
-        git clone --quiet "https://github.com/${REPO}.git" "$CLONE_DIR"
-        cd "$CLONE_DIR"
+        info "Downloading source code..."
+        rm -rf "$src_dir"
+        git clone -q --depth 1 "https://github.com/${REPO}.git" "$src_dir"
+        cd "$src_dir"
     fi
 
-    # Install dependencies
     info "Installing dependencies..."
-    bun install --silent
+    bun install --frozen-lockfile 2>/dev/null || bun install
 
-    # Run database migrations
-    info "Running database migrations..."
+    info "Setting up database..."
     bun run db:migrate
 
-    # Create a wrapper script
-    cat > "$INSTALL_DIR/vibemanager" << EOF
+    # Create CLI wrapper
+    cat > "$INSTALL_DIR/vibemanager" << 'EOF'
 #!/bin/bash
-cd "$CLONE_DIR"
-exec bun run cli "\$@"
+cd "$HOME/.local/share/vibemanager/source"
+exec bun run cli "$@"
 EOF
     chmod +x "$INSTALL_DIR/vibemanager"
 
     success "Installed from source"
 }
 
-# Update PATH if needed
-update_path() {
-    # Check if install dir is in PATH
-    if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-        warn "$INSTALL_DIR is not in your PATH"
-
-        # Detect shell and profile file
-        SHELL_NAME=$(basename "$SHELL")
-        case "$SHELL_NAME" in
-            bash)
-                PROFILE="$HOME/.bashrc"
-                ;;
-            zsh)
-                PROFILE="$HOME/.zshrc"
-                ;;
-            fish)
-                PROFILE="$HOME/.config/fish/config.fish"
-                ;;
-            *)
-                PROFILE="$HOME/.profile"
-                ;;
-        esac
-
-        echo ""
-        echo "Add the following line to your $PROFILE:"
-        echo ""
-        if [ "$SHELL_NAME" = "fish" ]; then
-            echo "  set -gx PATH \$PATH $INSTALL_DIR"
-        else
-            echo "  export PATH=\"\$PATH:$INSTALL_DIR\""
-        fi
-        echo ""
-        echo "Then run: source $PROFILE"
-        echo ""
-
-        read -p "Would you like to add this automatically? [y/N] " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            if [ "$SHELL_NAME" = "fish" ]; then
-                echo "set -gx PATH \$PATH $INSTALL_DIR" >> "$PROFILE"
-            else
-                echo "export PATH=\"\$PATH:$INSTALL_DIR\"" >> "$PROFILE"
-            fi
-            success "Added to $PROFILE"
-            info "Run 'source $PROFILE' or restart your terminal"
-        fi
+# Configure PATH
+setup_path() {
+    # Already in PATH?
+    if [[ ":$PATH:" == *":$INSTALL_DIR:"* ]]; then
+        return 0
     fi
+
+    step "Configuring PATH"
+
+    local shell_name rc_file
+    shell_name=$(basename "$SHELL")
+
+    case "$shell_name" in
+        zsh)  rc_file="$HOME/.zshrc" ;;
+        fish) rc_file="$HOME/.config/fish/config.fish" ;;
+        *)    rc_file="$HOME/.bashrc" ;;
+    esac
+
+    # Create file if it doesn't exist
+    touch "$rc_file"
+
+    # Check if already added
+    if grep -q "/.local/bin" "$rc_file" 2>/dev/null; then
+        success "PATH already configured in $rc_file"
+    else
+        if [ "$shell_name" = "fish" ]; then
+            mkdir -p "$(dirname "$rc_file")"
+            echo "set -gx PATH \$PATH $INSTALL_DIR" >> "$rc_file"
+        else
+            echo "" >> "$rc_file"
+            echo "# VibeManager" >> "$rc_file"
+            echo "export PATH=\"\$PATH:$INSTALL_DIR\"" >> "$rc_file"
+        fi
+        success "Added to $rc_file"
+    fi
+
+    # Export for current session
+    export PATH="$PATH:$INSTALL_DIR"
 }
 
-# Print completion message
-print_completion() {
+# Print success message
+print_success() {
     printf "\n"
-    printf "${GREEN}============================================${NC}\n"
-    printf "${GREEN}  VibeManager installed successfully!${NC}\n"
-    printf "${GREEN}============================================${NC}\n"
+    printf "${GREEN}${BOLD}╔══════════════════════════════════════════════════════════╗${NC}\n"
+    printf "${GREEN}${BOLD}║           VibeManager installed successfully!            ║${NC}\n"
+    printf "${GREEN}${BOLD}╚══════════════════════════════════════════════════════════╝${NC}\n"
     printf "\n"
-    printf "Get started:\n"
+    printf "${BOLD}Get started:${NC}\n"
     printf "\n"
-    printf "  1. Initialize VibeManager:\n"
-    printf "     ${BLUE}vibemanager init${NC}\n"
+    printf "  ${YELLOW}1.${NC} Restart your terminal (or run: ${BLUE}source ~/.bashrc${NC})\n"
     printf "\n"
-    printf "  2. Start the server:\n"
-    printf "     ${BLUE}vibemanager start${NC}\n"
+    printf "  ${YELLOW}2.${NC} Initialize and start VibeManager:\n"
+    printf "     ${GREEN}\$ vibemanager init${NC}\n"
     printf "\n"
-    printf "  3. Check status:\n"
-    printf "     ${BLUE}vibemanager status${NC}\n"
+    printf "  ${YELLOW}3.${NC} Open in browser:\n"
+    printf "     ${BLUE}http://localhost:3131${NC}\n"
     printf "\n"
-    printf "For remote access, use Tailscale, Cloudflare Tunnel,\n"
-    printf "ngrok, or any tunneling service of your choice.\n"
+    printf "${BOLD}Commands:${NC}\n"
+    printf "  vibemanager init     Initialize (first-time setup)\n"
+    printf "  vibemanager start    Start the server\n"
+    printf "  vibemanager stop     Stop the server\n"
+    printf "  vibemanager status   Show status and URLs\n"
     printf "\n"
-    printf "Documentation: https://github.com/%s#readme\n" "${REPO}"
+    printf "${BOLD}Remote access:${NC} Use Tailscale, Cloudflare Tunnel, or ngrok\n"
+    printf "\n"
+    printf "Docs: ${BLUE}https://github.com/${REPO}#readme${NC}\n"
     printf "\n"
 }
 
-# Main installation flow
+# Main
 main() {
+    setup_colors
+
     printf "\n"
-    printf "${BLUE}╔════════════════════════════════════════════╗${NC}\n"
-    printf "${BLUE}║       VibeManager Installer                ║${NC}\n"
-    printf "${BLUE}║   AI-Powered Development Environment       ║${NC}\n"
-    printf "${BLUE}╚════════════════════════════════════════════╝${NC}\n"
+    printf "${BLUE}${BOLD}╔══════════════════════════════════════════════════════════╗${NC}\n"
+    printf "${BLUE}${BOLD}║              VibeManager Installer                       ║${NC}\n"
+    printf "${BLUE}${BOLD}║        AI-Powered Development Environment                ║${NC}\n"
+    printf "${BLUE}${BOLD}╚══════════════════════════════════════════════════════════╝${NC}\n"
     printf "\n"
 
     detect_platform
-    check_dependencies
+    info "Platform: $PLATFORM"
+
     setup_directories
-    install_binary
-    update_path
-    print_completion
+
+    # Install dependencies
+    step "Checking dependencies"
+    install_tmux
+
+    # Install VibeManager (try binary, fallback to source)
+    step "Installing VibeManager"
+    if ! download_binary; then
+        install_from_source
+    fi
+
+    setup_path
+    print_success
 }
 
-# Run main
 main "$@"
