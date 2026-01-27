@@ -1328,7 +1328,7 @@ app.post('/api/provider/configure', (req, res) => {
 
     // Update summary generator config
     if (summaryGenerator) {
-      summaryGenerator.configure({ baseUrl, apiKey, model });
+      summaryGenerator.saveSettings({ ai: { baseUrl, apiKey, model } });
     }
 
     res.json({ success: true, message: 'Provider configured successfully' });
