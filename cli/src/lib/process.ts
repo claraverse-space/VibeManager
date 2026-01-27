@@ -9,14 +9,16 @@ const PID_FILE = join(homedir(), '.local', 'share', 'vibemanager', 'vibemanager.
  * Get the path to the server entry point
  */
 export function getServerPath(): string {
-  // In development, use the source directly
-  // In production (binary), this would be bundled
-  const devPath = join(dirname(import.meta.dir), '..', 'apps', 'server', 'src', 'index.ts');
-  const prodPath = join(dirname(import.meta.dir), 'server', 'index.js');
+  // import.meta.dir is cli/src/lib, go up 3 levels to reach project root
+  const projectRoot = join(import.meta.dir, '..', '..', '..');
+  const devPath = join(projectRoot, 'apps', 'server', 'src', 'index.ts');
 
   if (existsSync(devPath)) {
     return devPath;
   }
+
+  // Fallback for bundled binary
+  const prodPath = join(dirname(import.meta.dir), 'server', 'index.js');
   return prodPath;
 }
 
