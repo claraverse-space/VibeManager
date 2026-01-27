@@ -358,6 +358,104 @@ class BotFormatter {
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength - 3) + '...';
   }
+
+  /**
+   * Format GPU stats
+   * @param {Object} stats - GPU stats object
+   * @returns {string} - Formatted message
+   */
+  formatGPUStats(stats) {
+    if (!stats || !stats.gpus || stats.gpus.length === 0) {
+      return '🎮 GPU Stats\n\nNo GPUs detected or monitoring tools not available.\n\n💡 Install nvidia-smi (NVIDIA), rocm-smi (AMD), or xpu-smi (Intel) for detailed GPU monitoring.';
+    }
+
+    const lines = ['🎮 GPU Stats'];
+    lines.push('');
+    lines.push(`📊 Summary: ${stats.gpus.length} GPU(s) detected`);
+
+    if (stats.summary) {
+      lines.push(`   Total Memory: ${Math.round(stats.summary.totalMemory / 1024)}GB`);
+      lines.push(`   Avg Utilization: ${Math.round(stats.summary.avgUtilization)}%`);
+      if (stats.summary.totalPower > 0) {
+        lines.push(`   Total Power: ${Math.round(stats.summary.totalPower)}W`);
+      }
+    }
+    lines.push('');
+
+    for (const gpu of stats.gpus) {
+      lines.push(`GPU ${gpu.index}: ${gpu.name}`);
+      lines.push(`   Vendor: ${gpu.vendor}`);
+
+      if (gpu.temperature > 0) {
+        lines.push(`   Temp: ${Math.round(gpu.temperature)}°C`);
+      }
+
+      if (gpu.utilization) {
+        lines.push(`   GPU Util: ${Math.round(gpu.utilization.gpu)}%`);
+        if (gpu.utilization.memory > 0) {
+          lines.push(`   Mem Util: ${Math.round(gpu.utilization.memory)}%`);
+        }
+      }
+
+      if (gpu.memory && gpu.memory.total > 0) {
+        const usedGB = (gpu.memory.used / 1024).toFixed(1);
+        const totalGB = (gpu.memory.total / 1024).toFixed(1);
+        lines.push(`   Memory: ${usedGB}GB / ${totalGB}GB`);
+      }
+
+      if (gpu.power && gpu.power.draw > 0) {
+        lines.push(`   Power: ${Math.round(gpu.power.draw)}W / ${Math.round(gpu.power.limit)}W`);
+      }
+
+      if (gpu.note) {
+        lines.push(`   ℹ️ ${gpu.note}`);
+      }
+
+      lines.push('');
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Format session logs
+   * @param {string} sessionName - Session name
+   * @param {string} logs - Log content
+   * @param {number} lines - Number of lines requested
+   * @returns {string} - Formatted message
+   */
+  formatLogs(sessionName, logs, lines = 50) {
+    if (!logs || logs.trim() === '') {
+      return `📜 Logs: ${sessionName}\n\nNo logs available yet.\n\nStart the session and run some commands to see logs here.`;
+    }
+
+    const logLines = logs.trim().split('\n').slice(-lines);
+    const truncated = this.truncate(logLines.join('\n'), 3500);
+
+    return `📜 Logs: ${sessionName}\n(Last ${logLines.length} lines)\n\n\`\`\`\n${truncated}\n\`\`\``;
+  }
+
+  /**
+   * Format PRD created response
+   * @param {string} sessionName - Session name
+   * @param {string} prdContent - PRD content preview
+   * @returns {string} - Formatted message
+   */
+  formatPRDCreated(sessionName, prdContent) {
+    const preview = this.truncate(prdContent, 500);
+    const lines = ['📋 PRD Created'];
+    lines.push('');
+    lines.push(`Session: ${sessionName}`);
+    lines.push('');
+    lines.push('Preview:');
+    lines.push('```');
+    lines.push(preview);
+    lines.push('```');
+    lines.push('');
+    lines.push('PRD has been added to the session tasks.');
+
+    return lines.join('\n');
+  }
 }
 
 module.exports = BotFormatter;

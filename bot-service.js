@@ -6,10 +6,11 @@ const BotFormatter = require('./bot-formatter');
 const TelegramClient = require('./telegram-client');
 
 class BotService extends EventEmitter {
-  constructor(sessionManager, ralphLoop) {
+  constructor(sessionManager, ralphLoop, gpuMonitor = null) {
     super();
     this.sessionManager = sessionManager;
     this.ralphLoop = ralphLoop;
+    this.gpuMonitor = gpuMonitor;
 
     this.config = new BotConfig();
     this.parser = new BotParser();
@@ -162,6 +163,17 @@ class BotService extends EventEmitter {
           break;
         case 'progress':
           result = await this.handleProgress(params);
+          break;
+        case 'prd':
+          result = await this.handlePRD(params);
+          break;
+
+        // Monitoring
+        case 'logs':
+          result = await this.handleLogs(params);
+          break;
+        case 'gpu':
+          result = await this.handleGPU(params);
           break;
 
         // Ralph control
@@ -394,6 +406,82 @@ class BotService extends EventEmitter {
         { id: `ralph_pause:${session}`, label: '⏸️ Pause' }
       ]
     };
+  }
+
+  async handlePRD(params) {
+    const { session, description } = params;
+
+    if (!this.sessionManager.get(session)) {
+      return { text: this.formatter.formatError(`Session "${session}" not found`) };
+    }
+
+    if (!description || description.trim() === '') {
+      return { text: this.formatter.formatError('PRD description is required') };
+    }
+
+    // Create a comprehensive PRD task
+    const prdTitle = 'Product Requirements Document';
+    const prdDescription = `Create and document PRD:\n\n${description}\n\nThis should include:\n- Overview and goals\n- User stories\n- Technical requirements\n- Success criteria`;
+
+    const task = this.sessionManager.addTask(session, prdTitle, prdDescription);
+
+    return {
+      text: this.formatter.formatPRDCreated(session, description),
+      buttons: [
+        { id: `ralph_start:${session}`, label: '🔄 Start Ralph' },
+        { id: `tasks:${session}`, label: '📝 View Tasks' }
+      ]
+    };
+  }
+
+  async handleLogs(params) {
+    const { session, lines } = params;
+    const numLines = parseInt(lines) || 50;
+
+    if (!session) {
+      return { text: this.formatter.formatError('Session name is required') };
+    }
+
+    const sessionObj = this.sessionManager.get(session);
+    if (!sessionObj) {
+      return { text: this.formatter.formatError(`Session "${session}" not found`) };
+    }
+
+    // Get scrollback content (logs)
+    const logs = this.sessionManager.getScrollbackContent(session, 'latest');
+
+    return {
+      text: this.formatter.formatLogs(session, logs, numLines),
+      buttons: [
+        { id: `status:${session}`, label: '📊 Status' },
+        { id: `tasks:${session}`, label: '📝 Tasks' }
+      ]
+    };
+  }
+
+  async handleGPU(params) {
+    if (!this.gpuMonitor) {
+      return {
+        text: '🎮 GPU Stats\n\nGPU monitoring not available.\n\n💡 GPU monitoring requires the system to have GPU monitoring tools installed (nvidia-smi, rocm-smi, xpu-smi).',
+        buttons: []
+      };
+    }
+
+    try {
+      const stats = this.gpuMonitor.getSummary();
+      return {
+        text: this.formatter.formatGPUStats(stats),
+        buttons: []
+      };
+    } catch (err) {
+      console.error('[BotService] GPU stats error:', err);
+      return {
+        text: this.formatter.formatError('Failed to get GPU stats', {
+          suggestion: 'Make sure GPU monitoring tools are installed and accessible'
+        }),
+        buttons: []
+      };
+    }
   }
 
   async handleRalph(subcommand, params) {

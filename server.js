@@ -128,7 +128,7 @@ const terminals = new Map(); // termId -> { term, sessionName, ws }
 const activeAttachments = new Map(); // sessionName -> Set<ws>
 
 // Initialize bot service (Discord + Telegram)
-let botService = new BotService(sessionManager, ralphLoop);
+let botService = new BotService(sessionManager, ralphLoop, gpuMonitor);
 botService.initialize().catch(err => {
   console.error('[BotService] Failed to initialize:', err);
 });
@@ -138,7 +138,7 @@ async function restartBotService() {
   if (botService) {
     await botService.shutdown();
   }
-  botService = new BotService(sessionManager, ralphLoop);
+  botService = new BotService(sessionManager, ralphLoop, gpuMonitor);
   await botService.initialize();
   return botService;
 }
