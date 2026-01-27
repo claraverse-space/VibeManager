@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot Settings - VibeManager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .card h2 {
+            font-size: 20px;
+            margin-bottom: 16px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group .hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .form-group .hint a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .form-group .hint a:hover {
+            text-decoration: underline;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .steps {
+            background: #f9fafb;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .steps h3 {
+            font-size: 14px;
+            margin-bottom: 12px;
+            color: #333;
+        }
+
+        .steps ol {
+            margin-left: 20px;
+        }
+
+        .steps li {
+            margin-bottom: 8px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .steps code {
+            background: #e5e7eb;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            color: white;
+            text-decoration: none;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .connection-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .connection-status.connected {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .connection-status.disconnected {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .connection-status.pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Dashboard</a>
+
+        <div class="header">
+            <h1>🤖 Bot Settings</h1>
+            <p>Configure Discord and Telegram bots to control VibeManager from your phone</p>
+        </div>
+
+        <!-- Telegram Bot Settings -->
+        <div class="card">
+            <h2>
+                📱 Telegram Bot
+                <span id="telegram-status" class="connection-status disconnected">Not Configured</span>
+            </h2>
+
+            <div id="telegram-error" class="status error" style="display:none;">
+                <span>❌</span>
+                <span id="telegram-error-text"></span>
+            </div>
+
+            <div id="telegram-success" class="status success" style="display:none;">
+                <span>✅</span>
+                <span id="telegram-success-text"></span>
+            </div>
+
+            <div class="steps">
+                <h3>How to get your Telegram bot token:</h3>
+                <ol>
+                    <li>Open Telegram and search for <code>@BotFather</code></li>
+                    <li>Send <code>/newbot</code> and follow the prompts</li>
+                    <li>Copy the bot token (looks like: <code>123456:ABC-DEF...</code>)</li>
+                    <li>Search for <code>@userinfobot</code> to get your User ID</li>
+                    <li>Paste both below and click "Save & Test"</li>
+                </ol>
+            </div>
+
+            <div class="form-group">
+                <label for="telegram-token">Bot Token</label>
+                <input
+                    type="text"
+                    id="telegram-token"
+                    placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz123456789"
+                    autocomplete="off"
+                    spellcheck="false"
+                >
+                <div class="hint">Get from <a href="https://t.me/BotFather" target="_blank">@BotFather</a></div>
+            </div>
+
+            <div class="form-group">
+                <label for="telegram-users">Your Telegram User ID</label>
+                <input
+                    type="text"
+                    id="telegram-users"
+                    placeholder="123456789"
+                    autocomplete="off"
+                    spellcheck="false"
+                >
+                <div class="hint">Get from <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a> (just the number)</div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-primary" id="save-telegram" onclick="saveTelegramBot()">
+                    💾 Save & Test Connection
+                </button>
+                <button class="btn btn-secondary" id="clear-telegram" onclick="clearTelegramBot()">
+                    🗑️ Clear
+                </button>
+            </div>
+        </div>
+
+        <!-- Discord Bot Settings -->
+        <div class="card">
+            <h2>
+                💬 Discord Bot
+                <span id="discord-status" class="connection-status disconnected">Not Configured</span>
+            </h2>
+
+            <div id="discord-error" class="status error" style="display:none;">
+                <span>❌</span>
+                <span id="discord-error-text"></span>
+            </div>
+
+            <div id="discord-success" class="status success" style="display:none;">
+                <span>✅</span>
+                <span id="discord-success-text"></span>
+            </div>
+
+            <div class="steps">
+                <h3>How to get your Discord bot token:</h3>
+                <ol>
+                    <li>Go to <a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a></li>
+                    <li>Create a new application → Add Bot</li>
+                    <li>Enable "MESSAGE CONTENT INTENT" (important!)</li>
+                    <li>Copy the bot token</li>
+                    <li>Enable Developer Mode in Discord settings → Right-click your name → Copy User ID</li>
+                    <li>Paste both below and click "Save & Test"</li>
+                </ol>
+            </div>
+
+            <div class="form-group">
+                <label for="discord-token">Bot Token</label>
+                <input
+                    type="text"
+                    id="discord-token"
+                    placeholder="MTQ2NTU0NDcxNTUyMzg1NDM4Nw.GcIoOs.xyz123..."
+                    autocomplete="off"
+                    spellcheck="false"
+                >
+                <div class="hint">Get from <a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a></div>
+            </div>
+
+            <div class="form-group">
+                <label for="discord-users">Your Discord User ID</label>
+                <input
+                    type="text"
+                    id="discord-users"
+                    placeholder="123456789012345678"
+                    autocomplete="off"
+                    spellcheck="false"
+                >
+                <div class="hint">Right-click your username in Discord → Copy User ID (enable Developer Mode first)</div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-primary" id="save-discord" onclick="saveDiscordBot()">
+                    💾 Save & Test Connection
+                </button>
+                <button class="btn btn-secondary" id="clear-discord" onclick="clearDiscordBot()">
+                    🗑️ Clear
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function saveTelegramBot() {
+            const token = document.getElementById('telegram-token').value.trim();
+            const users = document.getElementById('telegram-users').value.trim();
+
+            if (!token || !users) {
+                showTelegramError('Please fill in both fields');
+                return;
+            }
+
+            const btn = document.getElementById('save-telegram');
+            btn.disabled = true;
+            btn.textContent = 'Testing...';
+
+            try {
+                const response = await fetch('/api/bot/configure', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        platform: 'telegram',
+                        token: token,
+                        allowedUsers: users.split(',').map(u => u.trim()).filter(Boolean)
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    updateTelegramStatus('connected', 'Connected');
+                    showTelegramSuccess(result.message || 'Bot configured successfully! Check your Telegram for a test message.');
+                } else {
+                    updateTelegramStatus('disconnected', 'Error');
+                    showTelegramError(result.error || 'Failed to configure bot');
+                }
+            } catch (err) {
+                showTelegramError('Connection error: ' + err.message);
+                updateTelegramStatus('disconnected', 'Error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '💾 Save & Test Connection';
+            }
+        }
+
+        async function saveDiscordBot() {
+            const token = document.getElementById('discord-token').value.trim();
+            const users = document.getElementById('discord-users').value.trim();
+
+            if (!token || !users) {
+                showDiscordError('Please fill in both fields');
+                return;
+            }
+
+            const btn = document.getElementById('save-discord');
+            btn.disabled = true;
+            btn.textContent = 'Testing...';
+
+            try {
+                const response = await fetch('/api/bot/configure', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        platform: 'discord',
+                        token: token,
+                        allowedUsers: users.split(',').map(u => u.trim()).filter(Boolean)
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    updateDiscordStatus('connected', 'Connected');
+                    showDiscordSuccess(result.message || 'Bot configured successfully! Check your Discord DMs for a test message.');
+                } else {
+                    updateDiscordStatus('disconnected', 'Error');
+                    showDiscordError(result.error || 'Failed to configure bot');
+                }
+            } catch (err) {
+                showDiscordError('Connection error: ' + err.message);
+                updateDiscordStatus('disconnected', 'Error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '💾 Save & Test Connection';
+            }
+        }
+
+        function clearTelegramBot() {
+            document.getElementById('telegram-token').value = '';
+            document.getElementById('telegram-users').value = '';
+            updateTelegramStatus('disconnected', 'Not Configured');
+            hideTelegramMessages();
+        }
+
+        function clearDiscordBot() {
+            document.getElementById('discord-token').value = '';
+            document.getElementById('discord-users').value = '';
+            updateDiscordStatus('disconnected', 'Not Configured');
+            hideDiscordMessages();
+        }
+
+        function updateTelegramStatus(status, text) {
+            const elem = document.getElementById('telegram-status');
+            elem.className = 'connection-status ' + status;
+            elem.textContent = text;
+        }
+
+        function updateDiscordStatus(status, text) {
+            const elem = document.getElementById('discord-status');
+            elem.className = 'connection-status ' + status;
+            elem.textContent = text;
+        }
+
+        function showTelegramSuccess(msg) {
+            hideTelegramMessages();
+            document.getElementById('telegram-success').style.display = 'flex';
+            document.getElementById('telegram-success-text').textContent = msg;
+        }
+
+        function showTelegramError(msg) {
+            hideTelegramMessages();
+            document.getElementById('telegram-error').style.display = 'flex';
+            document.getElementById('telegram-error-text').textContent = msg;
+        }
+
+        function hideTelegramMessages() {
+            document.getElementById('telegram-success').style.display = 'none';
+            document.getElementById('telegram-error').style.display = 'none';
+        }
+
+        function showDiscordSuccess(msg) {
+            hideDiscordMessages();
+            document.getElementById('discord-success').style.display = 'flex';
+            document.getElementById('discord-success-text').textContent = msg;
+        }
+
+        function showDiscordError(msg) {
+            hideDiscordMessages();
+            document.getElementById('discord-error').style.display = 'flex';
+            document.getElementById('discord-error-text').textContent = msg;
+        }
+
+        function hideDiscordMessages() {
+            document.getElementById('discord-success').style.display = 'none';
+            document.getElementById('discord-error').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

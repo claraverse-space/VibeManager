@@ -2159,7 +2159,10 @@
     <div class="dashboard-container" id="dashboard-container">
       <div class="dashboard-header">
         <h1>Projects</h1>
-        <button id="btn-new-from-dash" onclick="openNewSessionModal()">+ New Project</button>
+        <div style="display: flex; gap: 8px;">
+          <button onclick="window.location.href='/settings.html'" style="background: #6366f1;">🤖 Bot Settings</button>
+          <button id="btn-new-from-dash" onclick="openNewSessionModal()">+ New Project</button>
+        </div>
       </div>
       <div class="stats-bar" id="stats-bar"></div>
       <div class="cards-grid" id="cards-grid"></div>

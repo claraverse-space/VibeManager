@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -10,6 +12,7 @@ const SessionManager = require('./session-manager');
 const RalphLoop = require('./ralph-loop');
 const ConversationLinker = require('./conversation-linker');
 const SummaryGenerator = require('./summary-generator');
+const BotService = require('./bot-service');
 
 const app = express();
 const server = http.createServer(app);
@@ -123,6 +126,22 @@ const GPUMonitor = require('./gpu-monitor');
 const gpuMonitor = new GPUMonitor();
 const terminals = new Map(); // termId -> { term, sessionName, ws }
 const activeAttachments = new Map(); // sessionName -> Set<ws>
+
+// Initialize bot service (Discord + Telegram)
+let botService = new BotService(sessionManager, ralphLoop);
+botService.initialize().catch(err => {
+  console.error('[BotService] Failed to initialize:', err);
+});
+
+// Function to restart bot service with new config
+async function restartBotService() {
+  if (botService) {
+    await botService.shutdown();
+  }
+  botService = new BotService(sessionManager, ralphLoop);
+  await botService.initialize();
+  return botService;
+}
 
 // --- Run Migrations on Startup ---
 function runMigrations() {
@@ -1174,6 +1193,124 @@ app.get('/api/gpu/monitors', (req, res) => {
   });
 });
 
+// --- Bot Configuration APIs ---
+
+// Get current bot configuration
+app.get('/api/bot/config', (req, res) => {
+  const config = botService.config.config;
+  res.json({
+    telegram: {
+      token: config.telegram.token ? '***' + config.telegram.token.slice(-10) : '',
+      allowedUsers: config.telegram.allowedUsers
+    },
+    discord: {
+      token: config.discord.token ? '***' + config.discord.token.slice(-10) : '',
+      allowedUsers: config.discord.allowedUsers
+    }
+  });
+});
+
+// Get bot connection status
+app.get('/api/bot/status', (req, res) => {
+  res.json({
+    telegram: {
+      connected: botService.telegram?.ready || false,
+      enabled: botService.config.isTelegramEnabled()
+    },
+    discord: {
+      connected: botService.discord?.ready || false,
+      enabled: botService.config.isDiscordEnabled()
+    }
+  });
+});
+
+// Configure and test bot
+app.post('/api/bot/configure', async (req, res) => {
+  const { platform, token, allowedUsers } = req.body;
+
+  if (!platform || !token || !allowedUsers || allowedUsers.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing required fields'
+    });
+  }
+
+  try {
+    // Save to config
+    if (platform === 'telegram') {
+      botService.config.set('telegram.enabled', true);
+      botService.config.set('telegram.token', token);
+      botService.config.set('telegram.allowedUsers', allowedUsers);
+
+      // Set environment variables
+      process.env.TELEGRAM_BOT_TOKEN = token;
+      process.env.TELEGRAM_ALLOWED_USERS = allowedUsers.join(',');
+    } else if (platform === 'discord') {
+      botService.config.set('discord.enabled', true);
+      botService.config.set('discord.token', token);
+      botService.config.set('discord.allowedUsers', allowedUsers);
+
+      // Set environment variables
+      process.env.DISCORD_BOT_TOKEN = token;
+      process.env.DISCORD_ALLOWED_USERS = allowedUsers.join(',');
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid platform'
+      });
+    }
+
+    // Restart bot service with new config
+    console.log(`[BotService] Restarting ${platform} bot...`);
+    await restartBotService();
+
+    // Wait a bit for connection
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // Send test message to user
+    const userId = allowedUsers[0];
+    let testSent = false;
+
+    if (platform === 'telegram' && botService.telegram?.ready) {
+      try {
+        await botService.telegram.sendNotification(userId, {
+          text: '🎉 VibeManager Bot Connected!\n\nYour Telegram bot is now configured and ready to use.\n\nTry these commands:\n/help - See all commands\n/list - List sessions\n/create my-test - Create a test session'
+        });
+        testSent = true;
+      } catch (err) {
+        console.error('[Bot] Failed to send test message:', err.message);
+      }
+    } else if (platform === 'discord' && botService.discord?.ready) {
+      try {
+        await botService.discord.sendNotification(userId, {
+          text: '🎉 VibeManager Bot Connected!\n\nYour Discord bot is now configured and ready to use.\n\nTry these commands:\n/help - See all commands\n/list - List sessions\n/create my-test - Create a test session'
+        });
+        testSent = true;
+      } catch (err) {
+        console.error('[Bot] Failed to send test message:', err.message);
+      }
+    }
+
+    if (testSent) {
+      res.json({
+        success: true,
+        message: `✅ Bot configured successfully! Check your ${platform} for a test message.`
+      });
+    } else {
+      res.json({
+        success: true,
+        message: `⚠️ Bot configured but test message failed. Check the bot token and try /help in ${platform}.`
+      });
+    }
+  } catch (err) {
+    console.error('[Bot] Configuration error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
 // --- Summary APIs ---
 
 // Generate summary for a session
@@ -1581,7 +1718,8 @@ wss.on('connection', (ws, req) => {
 });
 
 // Graceful shutdown: kill attach processes, NOT tmux sessions
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
+  await botService.shutdown();
   terminals.forEach(({ term }) => term.kill());
   server.close();
   process.exit(0);
