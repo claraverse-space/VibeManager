@@ -7,6 +7,7 @@
   <link rel="icon" type="image/x-icon" href="https://claraverse.app/favicon.ico">
   <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -2261,7 +2262,7 @@
   <div class="status-bar">
     <span id="status-shell">--</span>
     <span><span class="status-dot" id="status-dot"></span><span id="status-connection">Disconnected</span></span>
-    <span id="notify-toggle" title="Toggle notification sound" style="cursor:pointer;margin-left:8px;">🔔</span>
+    <span id="notify-toggle" title="Toggle notification sound" style="cursor:pointer;margin-left:8px;"><i data-lucide="bell" style="width:14px;height:14px;vertical-align:middle;"></i></span>
   </div>
 
   <!-- Sessions modal -->
@@ -2464,7 +2465,15 @@
     }
 
     function updateNotifyIcon() {
-      document.getElementById('notify-toggle').textContent = notifySoundEnabled ? '🔔' : '🔕';
+      const toggle = document.getElementById('notify-toggle');
+      toggle.textContent = '';
+      const icon = document.createElement('i');
+      icon.setAttribute('data-lucide', notifySoundEnabled ? 'bell' : 'bell-off');
+      icon.style.width = '14px';
+      icon.style.height = '14px';
+      icon.style.verticalAlign = 'middle';
+      toggle.appendChild(icon);
+      lucide.createIcons();
     }
 
     const isMobile = window.innerWidth <= 600;
@@ -3408,6 +3417,9 @@
         const ralphData = await ralphRes.json();
 
         renderTasksModal(tasksData, ralphData);
+
+        // Initialize icons after rendering
+        setTimeout(() => lucide.createIcons(), 50);
       } catch (err) {
         console.error('Failed to load tasks:', err);
       }
@@ -3449,7 +3461,7 @@
       const stepElement = taskElement.querySelector(`.task-step[data-step="${data.completedStep}"]`);
       if (stepElement) {
         stepElement.className = 'task-step completed';
-        stepElement.textContent = `✓ ${data.completedStep}`;
+        stepElement.textContent = data.completedStep;
       }
     }
 
@@ -3521,8 +3533,8 @@
         if (steps.length > 0) {
           stepsHtml = '<div class="task-steps">';
           for (const step of steps) {
-            const icon = step.status === 'completed' ? '✓' : step.status === 'in-progress' ? '◉' : '○';
-            stepsHtml += `<span class="task-step ${step.status}">${icon} ${escapeHtml(step.name)}</span>`;
+            const iconName = step.status === 'completed' ? 'check-circle' : step.status === 'in-progress' ? 'loader' : 'circle';
+            stepsHtml += `<span class="task-step ${step.status}"><i data-lucide="${iconName}" style="width:12px;height:12px;"></i> ${escapeHtml(step.name)}</span>`;
           }
           stepsHtml += '</div>';
         }
@@ -3560,7 +3572,7 @@
             </div>
             <div class="task-actions">
               ${doneBtn}
-              <button onclick="deleteTask('${taskId}')">&#128465;</button>
+              <button onclick="deleteTask('${taskId}')"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
             </div>
           </div>
         `;
@@ -3714,7 +3726,7 @@
     }
 
     // --- Session Switcher ---
-    const sessionIcons = ['◆', '●', '■', '▲', '★', '◈', '◉', '▣', '◍', '⬟'];
+    const sessionIcons = ['#1', '#2', '#3', '#4', '#5', '#6', '#7', '#8', '#9', '#10'];
 
     function renderSessionSwitcher(sessions) {
       const container = document.getElementById('session-switcher');
@@ -4368,6 +4380,9 @@
       setView('dashboard');
       connectStatusWs();
       loadMemory(); // Load cross-session memory
+
+      // Initialize Lucide icons
+      setTimeout(() => lucide.createIcons(), 100);
     }
 
     init();

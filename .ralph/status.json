@@ -1,8 +1,0 @@
-{
-  "version": "1.0",
-  "status": "in_progress",
-  "task": "telegram-bot-commands-fix",
-  "progress": 50,
-  "currentStep": "Restarting server to ensure fresh bot connection",
-  "timestamp": "2026-01-27T06:36:00.000Z"
-}
