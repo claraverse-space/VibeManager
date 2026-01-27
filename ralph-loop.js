@@ -299,6 +299,10 @@ class RalphLoop extends EventEmitter {
       throw new Error('Loop is already running');
     }
 
+    // IMPORTANT: Clear any stale status file from previous tasks
+    // This prevents false completion detection from old status.json files
+    this.sessionManager.clearStatusFile(sessionName);
+
     // Check if there are tasks to do
     const currentTask = this.sessionManager.getCurrentTask(sessionName);
     if (!currentTask) {
@@ -346,6 +350,9 @@ class RalphLoop extends EventEmitter {
     if (state.status !== 'paused' && state.status !== 'stuck') {
       throw new Error('Loop is not paused or stuck');
     }
+
+    // Clear any stale status file
+    this.sessionManager.clearStatusFile(sessionName);
 
     // Reset circuit breaker if resuming from stuck
     if (state.status === 'stuck') {
