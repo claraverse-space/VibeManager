@@ -305,6 +305,15 @@ EOF
 create_systemd_docker_service() {
     log_info "Creating systemd service for Docker..."
 
+    # Find docker binary dynamically
+    local DOCKER_BIN=$(which docker 2>/dev/null || command -v docker 2>/dev/null)
+    if [ -z "$DOCKER_BIN" ]; then
+        log_error "Docker binary not found. Please install Docker first."
+        return 1
+    fi
+    
+    log_info "Using Docker at: $DOCKER_BIN"
+
     sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
 [Unit]
 Description=VibeManager - AI Coding Session Manager (Docker)
@@ -316,8 +325,8 @@ Type=oneshot
 RemainAfterExit=yes
 User=$USER
 WorkingDirectory=$INSTALL_DIR
-ExecStart=/usr/bin/docker compose up -d
-ExecStop=/usr/bin/docker compose down
+ExecStart=$DOCKER_BIN compose up -d
+ExecStop=$DOCKER_BIN compose down
 
 [Install]
 WantedBy=multi-user.target
@@ -387,6 +396,15 @@ EOF
 create_launchd_docker_service() {
     log_info "Creating launchd service for Docker..."
 
+    # Find docker binary dynamically
+    local DOCKER_BIN=$(which docker 2>/dev/null || command -v docker 2>/dev/null)
+    if [ -z "$DOCKER_BIN" ]; then
+        log_error "Docker binary not found. Please install Docker first."
+        return 1
+    fi
+    
+    log_info "Using Docker at: $DOCKER_BIN"
+
     PLIST_PATH="$HOME/Library/LaunchAgents/com.vibemanager.plist"
     mkdir -p "$HOME/Library/LaunchAgents"
 
@@ -399,7 +417,7 @@ create_launchd_docker_service() {
     <string>com.vibemanager</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/docker</string>
+        <string>$DOCKER_BIN</string>
         <string>compose</string>
         <string>up</string>
     </array>

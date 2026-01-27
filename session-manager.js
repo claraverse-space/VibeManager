@@ -1,38 +1,50 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const ConfigManager = require('./config-manager');
 
-const TMUX_BIN = '/usr/bin/tmux';
 const DATA_DIR = path.join(process.env.HOME, '.local/share/projectgenerator');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const STATE_DIR = path.join(DATA_DIR, 'state');
 const MEMORY_FILE = path.join(DATA_DIR, 'memory.json');
 const SESSION_PREFIX = 'pg_';
 
-// Common paths where claude/opencode might be installed
-const TOOL_SEARCH_PATHS = [
-  '/usr/bin',
-  '/usr/local/bin',
-  '/opt/homebrew/bin',
-  path.join(process.env.HOME, '.local/bin'),
-  path.join(process.env.HOME, '.npm-global/bin'),
-  path.join(process.env.HOME, '.opencode/bin'),  // OpenCode default install location
-  path.join(process.env.HOME, '.claude/bin'),    // Claude alternate location
-  '/snap/bin'
-];
+// ConfigManager instance (will be set on first use)
+let configManager = null;
 
-function findTool(name) {
-  // First try which
+// Get ConfigManager instance (lazy initialization)
+async function getConfigManager() {
+  if (!configManager) {
+    configManager = await ConfigManager.getInstance();
+  }
+  return configManager;
+}
+
+// Synchronous helper to get binary path
+function getTmuxBin() {
+  if (configManager) {
+    return configManager.getBinary('tmux');
+  }
+  // Fallback: try to discover synchronously if ConfigManager not initialized yet
+  // This should rarely happen as server.js initializes it first
+  const { execSync } = require('child_process');
   try {
-    const result = execSync(`which ${name} 2>/dev/null`, { encoding: 'utf-8' }).trim();
+    return execSync('which tmux 2>/dev/null || command -v tmux 2>/dev/null', { encoding: 'utf-8' }).trim() || '/usr/bin/tmux';
+  } catch {
+    return '/usr/bin/tmux'; // Last resort fallback
+  }
+}
+
+// Synchronous helper to get tool path (opencode, claude, etc.)
+function findTool(name) {
+  if (configManager) {
+    return configManager.getBinary(name);
+  }
+  // Fallback: try to discover synchronously
+  try {
+    const result = execSync(`which ${name} 2>/dev/null || command -v ${name} 2>/dev/null`, { encoding: 'utf-8' }).trim();
     if (result && fs.existsSync(result)) return result;
   } catch {}
-
-  // Search common paths
-  for (const dir of TOOL_SEARCH_PATHS) {
-    const fullPath = path.join(dir, name);
-    if (fs.existsSync(fullPath)) return fullPath;
-  }
   return null;
 }
 
@@ -68,7 +80,7 @@ class SessionManager {
 
   tmuxSessionExists(tmuxName) {
     try {
-      execSync(`${TMUX_BIN} has-session -t "${tmuxName}" 2>/dev/null`, { stdio: 'ignore' });
+      execSync(`${getTmuxBin()} has-session -t "${tmuxName}" 2>/dev/null`, { stdio: 'ignore' });
       return true;
     } catch {
       return false;
@@ -77,7 +89,7 @@ class SessionManager {
 
   listLiveTmuxSessions() {
     try {
-      const out = execSync(`${TMUX_BIN} list-sessions -F "#{session_name}" 2>/dev/null`);
+      const out = execSync(`${getTmuxBin()} list-sessions -F "#{session_name}" 2>/dev/null`);
       return out.toString().trim().split('\n').filter(s => s.startsWith(SESSION_PREFIX));
     } catch {
       return [];
@@ -132,18 +144,18 @@ class SessionManager {
 
     // Create detached tmux session
     execSync(
-      `${TMUX_BIN} new-session -d -s "${tmuxName}" -c "${projectPath}" -x ${cols} -y ${rows}`
+      `${getTmuxBin()} new-session -d -s "${tmuxName}" -c "${projectPath}" -x ${cols} -y ${rows}`
     );
 
     // Launch AI tool with full path
     if ((shell === 'opencode' || shell === 'claude') && toolPath) {
       // Only Claude supports --dangerously-skip-permissions flag
       const flag = (autonomous && shell === 'claude') ? ' --dangerously-skip-permissions' : '';
-      execSync(`${TMUX_BIN} send-keys -t "${tmuxName}" "${toolPath}${flag}" Enter`);
+      execSync(`${getTmuxBin()} send-keys -t "${tmuxName}" "${toolPath}${flag}" Enter`);
       // Send Enter after delay to skip first-time setup prompts
       setTimeout(() => {
         try {
-          execSync(`${TMUX_BIN} send-keys -t "${tmuxName}" Enter`);
+          execSync(`${getTmuxBin()} send-keys -t "${tmuxName}" Enter`);
         } catch {}
       }, 2000);
       // Send initial prompt after tool starts up
@@ -152,19 +164,19 @@ class SessionManager {
         // Wait longer for Claude to be fully ready (5 seconds)
         setTimeout(() => {
           try {
-            execSync(`${TMUX_BIN} send-keys -t "${tmuxName}" "${safePrompt}"`);
+            execSync(`${getTmuxBin()} send-keys -t "${tmuxName}" "${safePrompt}"`);
           } catch {}
         }, 5000);
         // Send Enter separately to submit the prompt (6 seconds)
         setTimeout(() => {
           try {
-            execSync(`${TMUX_BIN} send-keys -t "${tmuxName}" Enter`);
+            execSync(`${getTmuxBin()} send-keys -t "${tmuxName}" Enter`);
           } catch {}
         }, 6000);
         // Send another Enter in case multiline mode needs it (7 seconds)
         setTimeout(() => {
           try {
-            execSync(`${TMUX_BIN} send-keys -t "${tmuxName}" Enter`);
+            execSync(`${getTmuxBin()} send-keys -t "${tmuxName}" Enter`);
           } catch {}
         }, 7000);
       }
@@ -209,7 +221,7 @@ class SessionManager {
 
     if (this.tmuxSessionExists(meta.tmuxSession)) {
       try {
-        execSync(`${TMUX_BIN} kill-session -t "${meta.tmuxSession}"`);
+        execSync(`${getTmuxBin()} kill-session -t "${meta.tmuxSession}"`);
       } catch {}
     }
 
@@ -226,7 +238,7 @@ class SessionManager {
     if (!meta) throw new Error(`Session "${name}" not found`);
     if (this.tmuxSessionExists(meta.tmuxSession)) {
       try {
-        execSync(`${TMUX_BIN} kill-session -t "${meta.tmuxSession}"`);
+        execSync(`${getTmuxBin()} kill-session -t "${meta.tmuxSession}"`);
       } catch {}
     }
     meta.alive = false;
@@ -246,18 +258,18 @@ class SessionManager {
     const rows = 24;
 
     execSync(
-      `${TMUX_BIN} new-session -d -s "${meta.tmuxSession}" -c "${meta.projectPath}" -x ${cols} -y ${rows}`
+      `${getTmuxBin()} new-session -d -s "${meta.tmuxSession}" -c "${meta.projectPath}" -x ${cols} -y ${rows}`
     );
 
     if (meta.shell === 'opencode' || meta.shell === 'claude') {
       const toolPath = findTool(meta.shell);
       if (toolPath) {
         const flag = meta.autonomous !== false ? ' --dangerously-skip-permissions' : '';
-        execSync(`${TMUX_BIN} send-keys -t "${meta.tmuxSession}" "${toolPath}${flag}" Enter`);
+        execSync(`${getTmuxBin()} send-keys -t "${meta.tmuxSession}" "${toolPath}${flag}" Enter`);
         // Send Enter after delay to skip first-time setup prompts
         setTimeout(() => {
           try {
-            execSync(`${TMUX_BIN} send-keys -t "${meta.tmuxSession}" Enter`);
+            execSync(`${getTmuxBin()} send-keys -t "${meta.tmuxSession}" Enter`);
           } catch {}
         }, 2000);
         if (meta.initialPrompt) {
@@ -265,19 +277,19 @@ class SessionManager {
           // Wait longer for Claude to be fully ready (5 seconds)
           setTimeout(() => {
             try {
-              execSync(`${TMUX_BIN} send-keys -t "${meta.tmuxSession}" "${safePrompt}"`);
+              execSync(`${getTmuxBin()} send-keys -t "${meta.tmuxSession}" "${safePrompt}"`);
             } catch {}
           }, 5000);
           // Send Enter separately to submit the prompt (6 seconds)
           setTimeout(() => {
             try {
-              execSync(`${TMUX_BIN} send-keys -t "${meta.tmuxSession}" Enter`);
+              execSync(`${getTmuxBin()} send-keys -t "${meta.tmuxSession}" Enter`);
             } catch {}
           }, 6000);
           // Send another Enter in case multiline mode needs it (7 seconds)
           setTimeout(() => {
             try {
-              execSync(`${TMUX_BIN} send-keys -t "${meta.tmuxSession}" Enter`);
+              execSync(`${getTmuxBin()} send-keys -t "${meta.tmuxSession}" Enter`);
             } catch {}
           }, 7000);
         }
@@ -329,7 +341,7 @@ class SessionManager {
       // Capture full scrollback buffer (up to 10000 lines)
       // Using execSync with fixed args (no user input in command string)
       const buffer = execSync(
-        `${TMUX_BIN} capture-pane -t "${meta.tmuxSession}" -p -S -10000 2>/dev/null`,
+        `${getTmuxBin()} capture-pane -t "${meta.tmuxSession}" -p -S -10000 2>/dev/null`,
         { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
       );
       fs.writeFileSync(filepath, buffer);

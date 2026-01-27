@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const net = require('net');
 const { spawn, execSync } = require('child_process');
+const ConfigManager = require('./config-manager');
 const SessionManager = require('./session-manager');
 const RalphLoop = require('./ralph-loop');
 const ConversationLinker = require('./conversation-linker');
@@ -17,7 +18,9 @@ const wss = new WebSocket.Server({ server });
 
 const PORT = process.env.PORT || 3131;
 const CODE_PORT = process.env.CODE_PORT || 8083;
-const TMUX_BIN = '/usr/bin/tmux';
+
+// ConfigManager instance (initialized in main())
+let configManager = null;
 
 // Start code-server for local installations (not in Docker)
 let codeServerProcess = null;
@@ -316,6 +319,40 @@ app.get('/api/system', (req, res) => {
   } else {
     res.json({ cpu: { percent: 0, cores: 0 }, mem: { total: 0, used: 0, percent: 0 }, swap: { total: 0, used: 0, percent: 0 }, temp: 0, disk: { percent: 0, used: 0, total: 0 }, load: [0, 0, 0], net: { rx: 0, tx: 0 }, uptime: 0 });
   }
+});
+
+// Get binary configuration status
+app.get('/api/config/binaries', (req, res) => {
+  try {
+    if (!configManager) {
+      return res.status(503).json({ error: 'Configuration not initialized' });
+    }
+    const binaries = configManager.getAllBinaries();
+    res.json({ binaries });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Refresh binary configuration
+app.post('/api/config/refresh', async (req, res) => {
+  try {
+    if (!configManager) {
+      return res.status(503).json({ error: 'Configuration not initialized' });
+    }
+    await configManager.refresh();
+    const binaries = configManager.getAllBinaries();
+    res.json({ success: true, binaries });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// Get user home directory
+app.get('/api/home', (req, res) => {
+  const home = process.env.HOME || process.env.USERPROFILE || '/home';
+  res.json({ home });
 });
 
 app.get('/api/browse', (req, res) => {
@@ -1520,12 +1557,39 @@ wss.on('connection', (ws, req) => {
   activeAttachments.get(sessionName).add(ws);
 
   // Spawn tmux attach
-  const term = pty.spawn(TMUX_BIN, ['attach', '-t', sessionMeta.tmuxSession], {
-    name: 'xterm-256color',
-    cols,
-    rows,
-    env: { ...process.env, COLORTERM: 'truecolor' }
-  });
+  let tmuxBin;
+  try {
+    if (!configManager) {
+      ws.send(JSON.stringify({ type: 'error', message: 'Configuration not initialized' }));
+      ws.close();
+      return;
+    }
+    tmuxBin = configManager.getBinary('tmux');
+    if (!tmuxBin) {
+      ws.send(JSON.stringify({ type: 'error', message: 'tmux binary not found' }));
+      ws.close();
+      return;
+    }
+  } catch (err) {
+    ws.send(JSON.stringify({ type: 'error', message: `Config error: ${err.message}` }));
+    ws.close();
+    return;
+  }
+
+  let term;
+  try {
+    term = pty.spawn(tmuxBin, ['attach', '-t', sessionMeta.tmuxSession], {
+      name: 'xterm-256color',
+      cols,
+      rows,
+      env: { ...process.env, COLORTERM: 'truecolor' }
+    });
+  } catch (err) {
+    console.error(`Failed to spawn tmux attach for ${sessionName}:`, err.message);
+    ws.send(JSON.stringify({ type: 'error', message: `Failed to attach: ${err.message}` }));
+    ws.close();
+    return;
+  }
 
   const termId = `${sessionName}_${term.pid}`;
   terminals.set(termId, { term, sessionName, ws });
@@ -1587,6 +1651,49 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`VibeManager running at http://0.0.0.0:${PORT}`);
-});
+// Main startup function
+async function main() {
+  try {
+    // Initialize ConfigManager first
+    console.log('[VibeManager] Initializing configuration...');
+    configManager = await ConfigManager.initialize();
+    console.log('[VibeManager] Configuration initialized successfully');
+
+    // Start the server
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`VibeManager running at http://0.0.0.0:${PORT}`);
+    });
+  } catch (err) {
+    console.error('[VibeManager] Failed to start:', err.message);
+    console.error('\nRun with --check-config flag for detailed diagnostics.');
+    process.exit(1);
+  }
+}
+
+// Handle --check-config flag
+if (process.argv.includes('--check-config')) {
+  (async () => {
+    try {
+      const config = await ConfigManager.initialize();
+      console.log('\n✓ Configuration check passed!');
+      console.log('\nBinary locations:');
+      const binaries = config.getAllBinaries();
+      for (const [name, info] of Object.entries(binaries)) {
+        if (info.found) {
+          console.log(`  ✓ ${info.name}: ${info.path}`);
+          console.log(`    Version: ${info.version}`);
+        } else {
+          console.log(`  ✗ ${info.name}: NOT FOUND ${info.critical ? '(CRITICAL)' : '(optional)'}`);
+          console.log(`    Install: ${info.installCmd[process.platform === 'darwin' ? 'macos' : 'linux']}`);
+        }
+      }
+      process.exit(0);
+    } catch (err) {
+      console.error('\n✗ Configuration check failed:', err.message);
+      process.exit(1);
+    }
+  })();
+} else {
+  // Normal startup
+  main();
+}

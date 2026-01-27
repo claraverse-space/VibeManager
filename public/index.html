@@ -1833,8 +1833,29 @@
       background: var(--bg);
       border-radius: 0;
       margin-top: 8px;
-      max-height: 200px;
+      max-height: 250px;
       overflow-y: auto;
+    }
+
+    .folder-browser-search {
+      padding: 8px 10px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--surface3);
+    }
+
+    .folder-browser-search input {
+      width: 100%;
+      background: var(--bg);
+      border: none;
+      color: var(--text);
+      padding: 6px 10px;
+      font-size: 11px;
+      outline: none;
+      border-radius: 0;
+    }
+
+    .folder-browser-search input::placeholder {
+      color: var(--text-dim);
     }
 
     .folder-browser-nav {
@@ -1863,6 +1884,23 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .folder-browser-nav .curr-path:hover {
+      color: var(--text);
+    }
+
+    .folder-browser-nav .path-input {
+      flex: 1;
+      font-size: 10px;
+      font-family: monospace;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--accent);
+      padding: 4px 8px;
+      outline: none;
+      border-radius: 2px;
     }
 
     .folder-browser .fb-item {
@@ -2295,9 +2333,13 @@
           </div>
           <div id="source-folder">
             <div class="folder-browser">
+              <div class="folder-browser-search">
+                <input type="text" id="fb-search" placeholder="Search folders..." autocomplete="off">
+              </div>
               <div class="folder-browser-nav">
                 <button id="fb-up">&#8592;</button>
-                <span class="curr-path" id="fb-path">/home</span>
+                <span class="curr-path" id="fb-path" title="Click to edit path">/home</span>
+                <input type="text" class="path-input" id="fb-path-input" style="display:none" placeholder="Enter path..." autocomplete="off">
               </div>
               <div id="fb-list"></div>
               <div class="new-folder-inline">
@@ -2416,6 +2458,8 @@
     let ctrlActive = false;
     let intentionalDisconnect = false;
     let fbCurrentPath = '/home';
+    let fbAllFolders = []; // Store all folders for search filtering
+    let userHomeDir = null; // Store user's home directory
     let dashboardVisible = false;
 
     // Notification sound
@@ -2708,21 +2752,93 @@
       fbCurrentPath = dirPath;
       document.getElementById('fb-path').textContent = dirPath;
       const list = document.getElementById('fb-list');
+      const searchInput = document.getElementById('fb-search');
+      searchInput.value = ''; // Clear search when browsing
+      
       list.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-dim);font-size:11px">...</div>';
       try {
         const res = await fetch(`/api/browse?path=${encodeURIComponent(dirPath)}`);
         const data = await res.json();
         if (data.error) { list.innerHTML = `<div style="padding:12px;color:var(--danger);font-size:11px">${data.error}</div>`; return; }
-        if (data.folders.length === 0) {
-          list.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-dim);font-size:11px">Empty</div>';
-        } else {
-          list.innerHTML = data.folders.map(f => {
-            const safePath = f.path.replace(/'/g, "\\'");
-            return `<div class="fb-item" onclick="fbBrowse('${safePath}')">&#128193; ${f.name}</div>`;
-          }).join('');
-        }
+        
+        fbAllFolders = data.folders; // Store all folders for search
+        renderFolderList(fbAllFolders);
       } catch (err) {
         list.innerHTML = `<div style="padding:12px;color:var(--danger);font-size:11px">${err.message}</div>`;
+      }
+    }
+
+    function renderFolderList(folders) {
+      const list = document.getElementById('fb-list');
+      if (folders.length === 0) {
+        list.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-dim);font-size:11px">Empty</div>';
+      } else {
+        list.innerHTML = folders.map(f => {
+          const safePath = f.path.replace(/'/g, "\\'");
+          return `<div class="fb-item" onclick="fbBrowse('${safePath}')">&#128193; ${f.name}</div>`;
+        }).join('');
+      }
+    }
+
+    function fbSearch(query) {
+      const filtered = query.trim() === '' 
+        ? fbAllFolders 
+        : fbAllFolders.filter(f => f.name.toLowerCase().includes(query.toLowerCase()));
+      renderFolderList(filtered);
+    }
+
+    // Path editing functions
+    function fbShowPathInput() {
+      const pathSpan = document.getElementById('fb-path');
+      const pathInput = document.getElementById('fb-path-input');
+      pathSpan.style.display = 'none';
+      pathInput.style.display = 'block';
+      pathInput.value = fbCurrentPath;
+      pathInput.focus();
+      pathInput.select();
+    }
+
+    function fbHidePathInput() {
+      const pathSpan = document.getElementById('fb-path');
+      const pathInput = document.getElementById('fb-path-input');
+      pathSpan.style.display = 'block';
+      pathInput.style.display = 'none';
+    }
+
+    async function fbNavigateToPath(inputPath) {
+      const path = inputPath.trim();
+      if (!path) {
+        fbHidePathInput();
+        return;
+      }
+      
+      // Expand ~ to home directory
+      let resolvedPath = path;
+      if (path.startsWith('~')) {
+        resolvedPath = (userHomeDir || '/home') + path.slice(1);
+      }
+      
+      // Validate path exists by trying to browse it
+      try {
+        const res = await fetch(`/api/browse?path=${encodeURIComponent(resolvedPath)}`);
+        const data = await res.json();
+        if (data.error) {
+          // Path doesn't exist or isn't a directory, show error briefly
+          const pathInput = document.getElementById('fb-path-input');
+          pathInput.style.borderColor = 'var(--danger)';
+          pathInput.placeholder = 'Path not found!';
+          setTimeout(() => {
+            pathInput.style.borderColor = 'var(--accent)';
+            pathInput.placeholder = 'Enter path...';
+          }, 1500);
+          return;
+        }
+        
+        // Path is valid, navigate to it
+        fbHidePathInput();
+        fbBrowse(resolvedPath);
+      } catch (err) {
+        console.error('Path navigation error:', err);
       }
     }
 
@@ -2739,7 +2855,10 @@
         const data = await res.json();
         if (data.error) { alert(data.error); return; }
         input.value = '';
-        fbBrowse(fbCurrentPath);
+        
+        // Auto-navigate to the newly created folder
+        const newFolderPath = data.path;
+        await fbBrowse(newFolderPath);
       } catch (err) { alert(err.message); }
     }
 
@@ -3735,9 +3854,24 @@
       setView('terminal');
     }
 
-    function openNewSessionModal() {
+    async function openNewSessionModal() {
       document.getElementById('new-session-modal').classList.add('open');
-      fbBrowse(fbCurrentPath || '/home');
+      
+      // Fetch user's home directory if not already cached
+      if (!userHomeDir) {
+        try {
+          const res = await fetch('/api/home');
+          const data = await res.json();
+          userHomeDir = data.home;
+          fbCurrentPath = userHomeDir;
+        } catch (err) {
+          console.error('Failed to fetch home directory:', err);
+          userHomeDir = '/home'; // Fallback
+          fbCurrentPath = userHomeDir;
+        }
+      }
+      
+      fbBrowse(fbCurrentPath);
     }
 
     // --- System Monitor ---
@@ -4220,6 +4354,34 @@
 
     document.getElementById('fb-create').addEventListener('click', fbCreateFolder);
     document.getElementById('fb-new-folder').addEventListener('keydown', e => { if (e.key === 'Enter') fbCreateFolder(); });
+    
+    // Search input for filtering folders
+    document.getElementById('fb-search').addEventListener('input', (e) => {
+      fbSearch(e.target.value);
+    });
+
+    // Click on path to edit directly
+    document.getElementById('fb-path').addEventListener('click', fbShowPathInput);
+
+    // Handle path input events
+    document.getElementById('fb-path-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        fbNavigateToPath(e.target.value);
+      } else if (e.key === 'Escape') {
+        fbHidePathInput();
+      }
+    });
+
+    document.getElementById('fb-path-input').addEventListener('blur', (e) => {
+      // Small delay to allow click events to fire first
+      setTimeout(() => fbHidePathInput(), 150);
+    });
+
+    // Handle paste for instant navigation
+    document.getElementById('fb-path-input').addEventListener('paste', (e) => {
+      setTimeout(() => fbNavigateToPath(e.target.value), 50);
+    });
 
     // Source tab switching
     document.querySelectorAll('.source-tab').forEach(tab => {

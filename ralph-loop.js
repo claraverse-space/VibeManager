@@ -9,12 +9,37 @@
  */
 
 const EventEmitter = require('events');
+const ConfigManager = require('./config-manager');
+
+// ConfigManager instance (lazy initialization)
+let configManager = null;
+
+// Synchronous helper to get tmux path
+function getTmuxBin() {
+  if (configManager) {
+    return configManager.getBinary('tmux');
+  }
+  // Fallback: try to discover synchronously
+  const { execSync } = require('child_process');
+  try {
+    return execSync('which tmux 2>/dev/null || command -v tmux 2>/dev/null', { encoding: 'utf-8' }).trim() || '/usr/bin/tmux';
+  } catch {
+    return '/usr/bin/tmux'; // Last resort fallback
+  }
+}
 
 class RalphLoop extends EventEmitter {
   constructor(sessionManager) {
     super();
     this.sessionManager = sessionManager;
     this.activeLoops = new Map(); // sessionName -> loopState
+    
+    // Initialize ConfigManager asynchronously
+    ConfigManager.getInstance().then(cm => {
+      configManager = cm;
+    }).catch(err => {
+      console.error('[RalphLoop] Failed to initialize ConfigManager:', err.message);
+    });
   }
 
   // Get loop state for a session
@@ -428,7 +453,6 @@ class RalphLoop extends EventEmitter {
     const { execSync } = require('child_process');
     const fs = require('fs');
     const path = require('path');
-    const TMUX_BIN = '/usr/bin/tmux';
 
     console.log(`[Ralph] Restarting session for next task`);
 
@@ -457,10 +481,13 @@ class RalphLoop extends EventEmitter {
     try {
       fs.writeFileSync(tmpFile, prompt);
 
+      // Get tmux binary path
+      const tmuxBin = getTmuxBin();
+
       // Send prompt via tmux load-buffer and paste-buffer
-      execSync(`${TMUX_BIN} load-buffer "${tmpFile}"`, { timeout: 2000 });
-      execSync(`${TMUX_BIN} paste-buffer -t "${meta.tmuxSession}"`, { timeout: 2000 });
-      execSync(`${TMUX_BIN} send-keys -t "${meta.tmuxSession}" Enter`, { timeout: 2000 });
+      execSync(`${tmuxBin} load-buffer "${tmpFile}"`, { timeout: 2000 });
+      execSync(`${tmuxBin} paste-buffer -t "${meta.tmuxSession}"`, { timeout: 2000 });
+      execSync(`${tmuxBin} send-keys -t "${meta.tmuxSession}" Enter`, { timeout: 2000 });
 
       // Cleanup
       fs.unlinkSync(tmpFile);
