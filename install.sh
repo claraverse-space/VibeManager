@@ -4,12 +4,20 @@
 
 set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# Colors for output (using tput for portability)
+if [ -t 1 ]; then
+    RED=$(tput setaf 1)
+    GREEN=$(tput setaf 2)
+    YELLOW=$(tput setaf 3)
+    BLUE=$(tput setaf 4)
+    NC=$(tput sgr0)
+else
+    RED=""
+    GREEN=""
+    YELLOW=""
+    BLUE=""
+    NC=""
+fi
 
 # Configuration
 REPO="claraverse-space/VibeManager"
