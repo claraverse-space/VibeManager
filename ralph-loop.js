@@ -4,17 +4,192 @@
  * Manages autonomous AI coding loops:
  * - Iterates through tasks until complete
  * - Fresh context each iteration
- * - Tracks progress and detects completion
+ * - Tracks progress and detects completion (status file + log-based)
  * - Circuit breaker for safety
  */
 
 const EventEmitter = require('events');
+const fs = require('fs');
+const path = require('path');
 
 class RalphLoop extends EventEmitter {
   constructor(sessionManager) {
     super();
     this.sessionManager = sessionManager;
     this.activeLoops = new Map(); // sessionName -> loopState
+    this.detectionIntervals = new Map(); // sessionName -> interval
+
+    // Detection settings
+    this.detectionSettings = {
+      method: 'both', // 'logs', 'status_file', 'both'
+      interval: 60 // seconds
+    };
+  }
+
+  // Update detection settings
+  updateDetectionSettings(settings) {
+    this.detectionSettings = { ...this.detectionSettings, ...settings };
+    console.log('[Ralph] Detection settings updated:', this.detectionSettings);
+
+    // Restart any active detection intervals with new settings
+    for (const [sessionName] of this.activeLoops) {
+      this.restartDetection(sessionName);
+    }
+  }
+
+  // Start periodic log-based detection for a session
+  startLogDetection(sessionName) {
+    // Clear any existing interval
+    this.stopLogDetection(sessionName);
+
+    const intervalMs = this.detectionSettings.interval * 1000;
+
+    console.log(`[Ralph] Starting log-based detection for ${sessionName} (every ${this.detectionSettings.interval}s)`);
+
+    const interval = setInterval(async () => {
+      await this.checkForCompletion(sessionName);
+    }, intervalMs);
+
+    this.detectionIntervals.set(sessionName, interval);
+  }
+
+  // Stop log detection for a session
+  stopLogDetection(sessionName) {
+    const interval = this.detectionIntervals.get(sessionName);
+    if (interval) {
+      clearInterval(interval);
+      this.detectionIntervals.delete(sessionName);
+      console.log(`[Ralph] Stopped log-based detection for ${sessionName}`);
+    }
+  }
+
+  // Restart detection with current settings
+  restartDetection(sessionName) {
+    const state = this.getLoopState(sessionName);
+    if (state && state.status === 'running') {
+      this.startLogDetection(sessionName);
+    }
+  }
+
+  // Check for task completion using logs and status file
+  async checkForCompletion(sessionName) {
+    const state = this.getLoopState(sessionName);
+    if (!state || state.status !== 'running') return;
+
+    const method = this.detectionSettings.method;
+
+    let statusFileComplete = false;
+    let logComplete = false;
+
+    // Check status file if enabled
+    if (method === 'status_file' || method === 'both') {
+      statusFileComplete = await this.checkStatusFile(sessionName);
+    }
+
+    // Check logs if enabled
+    if (method === 'logs' || method === 'both') {
+      logComplete = await this.checkLogs(sessionName);
+    }
+
+    // Determine if task is complete
+    const isComplete = statusFileComplete || logComplete;
+
+    if (isComplete) {
+      console.log(`[Ralph] Task completion detected for ${sessionName} (status_file: ${statusFileComplete}, logs: ${logComplete})`);
+
+      // Process completion
+      this.processTaskCompletion(sessionName, {
+        completion: { isComplete: true },
+        stuck: { isStuck: false, errors: [] }
+      });
+    }
+  }
+
+  // Check status file for completion
+  async checkStatusFile(sessionName) {
+    try {
+      const session = this.sessionManager.get(sessionName);
+      if (!session) return false;
+
+      const statusPath = path.join(session.projectPath, '.ralph', 'status.json');
+      if (!fs.existsSync(statusPath)) return false;
+
+      const content = fs.readFileSync(statusPath, 'utf-8');
+      const status = JSON.parse(content);
+
+      return status.status === 'completed';
+    } catch (err) {
+      return false;
+    }
+  }
+
+  // Check logs for completion signals
+  async checkLogs(sessionName) {
+    try {
+      const logs = this.sessionManager.getScrollbackContent(sessionName, 'latest');
+      if (!logs) return false;
+
+      // Get last 100 lines
+      const lines = logs.split('\n').slice(-100);
+      const recentContent = lines.join('\n').toLowerCase();
+
+      // Check for completion signals
+      const completionSignals = [
+        'task completed',
+        'done',
+        '[done]',
+        '[complete]',
+        'all tasks complete',
+        'verified and committed',
+        'commit hash:',
+        'successfully committed',
+        'git commit -m'
+      ];
+
+      // Check for any completion signal
+      for (const signal of completionSignals) {
+        if (recentContent.includes(signal)) {
+          // Verify it's recent (check if git commit was made)
+          if (this.verifyRecentCompletion(sessionName, lines)) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    } catch (err) {
+      console.error(`[Ralph] Error checking logs for ${sessionName}:`, err.message);
+      return false;
+    }
+  }
+
+  // Verify the completion signal is recent and valid
+  verifyRecentCompletion(sessionName, lines) {
+    // Look for git commit in recent output
+    const recentLines = lines.slice(-30).join('\n');
+
+    // Check for commit success patterns
+    const commitPatterns = [
+      /\[[\w-]+\s+[a-f0-9]+\]/i, // [main abc1234] style
+      /create mode/i,
+      /files? changed/i,
+      /insertions?\(\+\)/i,
+      /deletions?\(-\)/i
+    ];
+
+    for (const pattern of commitPatterns) {
+      if (pattern.test(recentLines)) {
+        return true;
+      }
+    }
+
+    // Also check for explicit DONE signal at end
+    const lastFewLines = lines.slice(-5).join('\n').toLowerCase();
+    if (lastFewLines.includes('done')) {
+      return true;
+    }
+
+    return false;
   }
 
   // Get loop state for a session
@@ -322,6 +497,9 @@ class RalphLoop extends EventEmitter {
     this.emit('started', { sessionName, state });
     this.sessionManager.logIteration(sessionName, state.iterationCount + 1);
 
+    // Start log-based detection
+    this.startLogDetection(sessionName);
+
     // Run first iteration
     await this.runIteration(sessionName);
 
@@ -333,6 +511,9 @@ class RalphLoop extends EventEmitter {
     const state = this.getLoopState(sessionName);
     if (!state) throw new Error('No loop state found');
     if (state.status !== 'running') throw new Error('Loop is not running');
+
+    // Stop log detection while paused
+    this.stopLogDetection(sessionName);
 
     state.status = 'paused';
     state.pausedAt = new Date().toISOString();
@@ -366,6 +547,9 @@ class RalphLoop extends EventEmitter {
     this.updateSessionMeta(sessionName, state);
     this.emit('resumed', { sessionName, state });
 
+    // Restart log detection
+    this.startLogDetection(sessionName);
+
     // Continue iteration
     await this.runIteration(sessionName);
 
@@ -376,6 +560,9 @@ class RalphLoop extends EventEmitter {
   stopLoop(sessionName) {
     const state = this.getLoopState(sessionName);
     if (!state) return null;
+
+    // Stop log detection
+    this.stopLogDetection(sessionName);
 
     state.status = 'idle';
     state.pausedAt = new Date().toISOString();

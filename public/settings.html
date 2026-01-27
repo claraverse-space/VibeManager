@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Telegram Bot Settings - VibeManager</title>
+    <title>Settings - VibeManager</title>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         * {
@@ -66,6 +66,9 @@
             font-size: 24px;
             color: var(--text);
             margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .header p {
@@ -82,7 +85,7 @@
         }
 
         .card h2 {
-            font-size: 20px;
+            font-size: 18px;
             margin-bottom: 16px;
             color: var(--text);
             display: flex;
@@ -102,7 +105,7 @@
             font-size: 14px;
         }
 
-        .form-group input {
+        .form-group input, .form-group select {
             width: 100%;
             padding: 12px;
             background: var(--surface2);
@@ -110,11 +113,10 @@
             border-radius: 8px;
             font-size: 14px;
             color: var(--text);
-            font-family: 'Courier New', monospace;
             transition: all 0.3s;
         }
 
-        .form-group input:focus {
+        .form-group input:focus, .form-group select:focus {
             outline: none;
             border-color: var(--accent);
             background: var(--surface3);
@@ -138,6 +140,17 @@
 
         .form-group .hint a:hover {
             text-decoration: underline;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .form-row .form-group {
+            flex: 1;
+            margin-bottom: 0;
         }
 
         .btn {
@@ -176,6 +189,11 @@
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+        }
+
+        .btn-sm {
+            padding: 10px 16px;
+            font-size: 13px;
         }
 
         .status {
@@ -281,16 +299,6 @@
             color: var(--danger);
         }
 
-        .connection-status.reconnecting {
-            background: rgba(245, 158, 11, 0.15);
-            color: var(--warn);
-        }
-
-        .connection-status.connecting {
-            background: rgba(99, 102, 241, 0.15);
-            color: var(--accent);
-        }
-
         .config-indicator {
             font-size: 12px;
             color: var(--success);
@@ -302,34 +310,221 @@
             display: block;
         }
 
-        .info-box {
-            background: var(--accent-dim);
-            border: 1px solid var(--accent);
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            color: var(--text);
+        .provider-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 8px;
+            margin-bottom: 16px;
         }
 
-        .info-box strong {
-            color: var(--accent);
+        .provider-btn {
+            padding: 12px;
+            background: var(--surface2);
+            border: 2px solid var(--surface3);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .provider-btn:hover {
+            background: var(--surface3);
+            border-color: var(--accent);
+        }
+
+        .provider-btn.selected {
+            border-color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        .provider-btn .name {
+            font-weight: 600;
+            color: var(--text);
+            font-size: 14px;
+        }
+
+        .provider-btn .url {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--surface3);
+            border-radius: 50%;
+            border-top-color: var(--accent);
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <a href="/" class="back-link">← Back to Dashboard</a>
+        <a href="/" class="back-link">
+            <i data-lucide="arrow-left" style="width:16px;height:16px;"></i> Back to Dashboard
+        </a>
 
         <div class="header">
-            <h1><i data-lucide="smartphone" style="width:24px;height:24px;vertical-align:middle;margin-right:8px;"></i>Telegram Bot Settings</h1>
-            <p>Control VibeManager from your phone using Telegram</p>
+            <h1>
+                <i data-lucide="settings" style="width:24px;height:24px;"></i>
+                Settings
+            </h1>
+            <p>Configure AI provider, Telegram bot, and task detection</p>
+        </div>
+
+        <!-- AI Provider Settings -->
+        <div class="card">
+            <h2>
+                <i data-lucide="cpu" style="width:20px;height:20px;"></i>
+                AI Provider
+            </h2>
+
+            <p style="color: var(--text-dim); margin-bottom: 16px; font-size: 14px;">
+                Select an OpenAI-compatible provider for AI features
+            </p>
+
+            <div class="provider-list" id="provider-list">
+                <div class="provider-btn" data-provider="openai" data-url="https://api.openai.com/v1">
+                    <div class="name">OpenAI</div>
+                    <div class="url">api.openai.com</div>
+                </div>
+                <div class="provider-btn" data-provider="chutes" data-url="https://llm.chutes.ai/v1">
+                    <div class="name">Chutes</div>
+                    <div class="url">llm.chutes.ai</div>
+                </div>
+                <div class="provider-btn" data-provider="nvidia" data-url="https://integrate.api.nvidia.com/v1">
+                    <div class="name">NVIDIA</div>
+                    <div class="url">nvidia.com</div>
+                </div>
+                <div class="provider-btn" data-provider="gemini" data-url="https://generativelanguage.googleapis.com/v1beta/openai">
+                    <div class="name">Gemini</div>
+                    <div class="url">googleapis.com</div>
+                </div>
+                <div class="provider-btn" data-provider="zai" data-url="https://api.z.ai/v1">
+                    <div class="name">Z.AI</div>
+                    <div class="url">z.ai</div>
+                </div>
+                <div class="provider-btn" data-provider="groq" data-url="https://api.groq.com/openai/v1">
+                    <div class="name">Groq</div>
+                    <div class="url">groq.com</div>
+                </div>
+                <div class="provider-btn" data-provider="together" data-url="https://api.together.xyz/v1">
+                    <div class="name">Together</div>
+                    <div class="url">together.xyz</div>
+                </div>
+                <div class="provider-btn" data-provider="custom" data-url="">
+                    <div class="name">Custom</div>
+                    <div class="url">Your endpoint</div>
+                </div>
+            </div>
+
+            <div class="form-group" id="custom-url-group" style="display: none;">
+                <label for="custom-url">Custom API URL</label>
+                <input
+                    type="text"
+                    id="custom-url"
+                    placeholder="https://your-api.com/v1"
+                    autocomplete="off"
+                >
+                <div class="hint">Enter the OpenAI-compatible API endpoint URL</div>
+            </div>
+
+            <div class="form-group">
+                <label for="api-key">API Key</label>
+                <input
+                    type="password"
+                    id="api-key"
+                    placeholder="sk-..."
+                    autocomplete="off"
+                >
+                <div class="hint">Your API key for the selected provider</div>
+            </div>
+
+            <div class="form-row" style="margin-bottom: 20px;">
+                <div class="form-group">
+                    <label>Model</label>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="model-select" style="flex: 1;">
+                            <option value="">Select a model...</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" id="fetch-models-btn" onclick="fetchModels()">
+                            <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i>
+                            Fetch
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="provider-error" class="status error" style="display:none;">
+                <i data-lucide="x-circle" style="width:16px;height:16px;"></i>
+                <span id="provider-error-text"></span>
+            </div>
+
+            <div id="provider-success" class="status success" style="display:none;">
+                <i data-lucide="check-circle" style="width:16px;height:16px;"></i>
+                <span id="provider-success-text"></span>
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="saveProviderSettings()">
+                    <i data-lucide="save" style="width:16px;height:16px;"></i>
+                    Save Provider Settings
+                </button>
+            </div>
+        </div>
+
+        <!-- Task Detection Settings -->
+        <div class="card">
+            <h2>
+                <i data-lucide="scan-search" style="width:20px;height:20px;"></i>
+                Task Detection
+            </h2>
+
+            <p style="color: var(--text-dim); margin-bottom: 16px; font-size: 14px;">
+                Configure how VibeManager detects task completion
+            </p>
+
+            <div class="form-group">
+                <label>Detection Method</label>
+                <select id="detection-method">
+                    <option value="logs">Log-based detection (checks logs every minute)</option>
+                    <option value="status_file">Status file only (.ralph/status.json)</option>
+                    <option value="both">Both methods (recommended)</option>
+                </select>
+                <div class="hint">Log-based detection scans output for completion signals like "DONE", commit messages, and test results</div>
+            </div>
+
+            <div class="form-group">
+                <label for="check-interval">Check Interval (seconds)</label>
+                <input
+                    type="number"
+                    id="check-interval"
+                    value="60"
+                    min="10"
+                    max="300"
+                >
+                <div class="hint">How often to check logs for task completion (10-300 seconds)</div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="saveDetectionSettings()">
+                    <i data-lucide="save" style="width:16px;height:16px;"></i>
+                    Save Detection Settings
+                </button>
+            </div>
         </div>
 
         <!-- Telegram Bot Settings -->
         <div class="card">
             <h2>
-                <i data-lucide="smartphone" style="width:20px;height:20px;"></i> Telegram Bot
+                <i data-lucide="smartphone" style="width:20px;height:20px;"></i>
+                Telegram Bot
                 <span id="telegram-status" class="connection-status disconnected">Not Configured</span>
             </h2>
 
@@ -364,7 +559,9 @@
                     spellcheck="false"
                 >
                 <div class="hint">Get from <a href="https://t.me/BotFather" target="_blank">@BotFather</a></div>
-                <div id="telegram-token-indicator" class="config-indicator"><i data-lucide="check" style="width:12px;height:12px;"></i> Token configured</div>
+                <div id="telegram-token-indicator" class="config-indicator">
+                    <i data-lucide="check" style="width:12px;height:12px;"></i> Token configured
+                </div>
             </div>
 
             <div class="form-group">
@@ -377,7 +574,9 @@
                     spellcheck="false"
                 >
                 <div class="hint">Get from <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a> (just the number)</div>
-                <div id="telegram-users-indicator" class="config-indicator"><i data-lucide="check" style="width:12px;height:12px;"></i> Users configured</div>
+                <div id="telegram-users-indicator" class="config-indicator">
+                    <i data-lucide="check" style="width:12px;height:12px;"></i> Users configured
+                </div>
             </div>
 
             <div class="button-group">
@@ -392,38 +591,254 @@
     </div>
 
     <script>
-        // Load existing configuration on page load
+        let selectedProvider = null;
+        let selectedProviderUrl = null;
+
         document.addEventListener('DOMContentLoaded', async () => {
-            await loadBotConfig();
+            await loadAllConfig();
             await updateBotStatus();
-
-            // Poll status every 5 seconds
+            setupProviderButtons();
             setInterval(updateBotStatus, 5000);
-
-            // Initialize Lucide icons
             lucide.createIcons();
         });
 
-        async function loadBotConfig() {
-            try {
-                const response = await fetch('/api/bot/config');
-                const config = await response.json();
+        function setupProviderButtons() {
+            const buttons = document.querySelectorAll('.provider-btn');
+            buttons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    buttons.forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                    selectedProvider = btn.dataset.provider;
+                    selectedProviderUrl = btn.dataset.url;
+                    const customGroup = document.getElementById('custom-url-group');
+                    customGroup.style.display = selectedProvider === 'custom' ? 'block' : 'none';
+                });
+            });
+        }
 
-                // Load Telegram config
-                if (config.telegram) {
-                    if (config.telegram.token) {
-                        document.getElementById('telegram-token').value = config.telegram.token;
+        async function loadAllConfig() {
+            try {
+                const botResponse = await fetch('/api/bot/config');
+                const botConfig = await botResponse.json();
+
+                if (botConfig.telegram) {
+                    if (botConfig.telegram.token) {
+                        document.getElementById('telegram-token').value = botConfig.telegram.token;
                         document.getElementById('telegram-token').placeholder = 'Token configured (shown masked)';
                         document.getElementById('telegram-token-indicator').classList.add('active');
                     }
-                    if (config.telegram.allowedUsers && config.telegram.allowedUsers.length > 0) {
-                        document.getElementById('telegram-users').value = config.telegram.allowedUsers.join(', ');
+                    if (botConfig.telegram.allowedUsers && botConfig.telegram.allowedUsers.length > 0) {
+                        document.getElementById('telegram-users').value = botConfig.telegram.allowedUsers.join(', ');
                         document.getElementById('telegram-users-indicator').classList.add('active');
                     }
                 }
+
+                const providerResponse = await fetch('/api/provider/config');
+                const providerConfig = await providerResponse.json();
+
+                if (providerConfig.provider) {
+                    const btn = document.querySelector('.provider-btn[data-provider="' + providerConfig.provider + '"]');
+                    if (btn) btn.click();
+                }
+
+                if (providerConfig.apiKey) {
+                    document.getElementById('api-key').value = providerConfig.apiKey;
+                }
+
+                if (providerConfig.customUrl) {
+                    document.getElementById('custom-url').value = providerConfig.customUrl;
+                }
+
+                if (providerConfig.model) {
+                    const select = document.getElementById('model-select');
+                    const option = document.createElement('option');
+                    option.value = providerConfig.model;
+                    option.textContent = providerConfig.model;
+                    option.selected = true;
+                    select.appendChild(option);
+                }
+
+                if (providerConfig.detection) {
+                    if (providerConfig.detection.method) {
+                        document.getElementById('detection-method').value = providerConfig.detection.method;
+                    }
+                    if (providerConfig.detection.interval) {
+                        document.getElementById('check-interval').value = providerConfig.detection.interval;
+                    }
+                }
             } catch (err) {
-                console.error('Failed to load bot config:', err);
+                console.error('Failed to load config:', err);
             }
+        }
+
+        async function fetchModels() {
+            const btn = document.getElementById('fetch-models-btn');
+            const select = document.getElementById('model-select');
+            const apiKey = document.getElementById('api-key').value.trim();
+
+            if (!selectedProvider) {
+                showProviderError('Please select a provider first');
+                return;
+            }
+
+            if (!apiKey) {
+                showProviderError('Please enter an API key');
+                return;
+            }
+
+            let baseUrl = selectedProviderUrl;
+            if (selectedProvider === 'custom') {
+                baseUrl = document.getElementById('custom-url').value.trim();
+                if (!baseUrl) {
+                    showProviderError('Please enter a custom API URL');
+                    return;
+                }
+            }
+
+            btn.disabled = true;
+            const originalText = btn.textContent;
+            btn.textContent = 'Loading...';
+
+            try {
+                const response = await fetch('/api/provider/models', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider: selectedProvider,
+                        baseUrl: baseUrl,
+                        apiKey: apiKey
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success && result.models) {
+                    // Clear existing options safely
+                    while (select.firstChild) {
+                        select.removeChild(select.firstChild);
+                    }
+
+                    // Add default option
+                    const defaultOpt = document.createElement('option');
+                    defaultOpt.value = '';
+                    defaultOpt.textContent = 'Select a model...';
+                    select.appendChild(defaultOpt);
+
+                    // Add model options
+                    result.models.forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model.id;
+                        option.textContent = model.name || model.id;
+                        select.appendChild(option);
+                    });
+                    showProviderSuccess('Found ' + result.models.length + ' models');
+                } else {
+                    showProviderError(result.error || 'Failed to fetch models');
+                }
+            } catch (err) {
+                showProviderError('Connection error: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '';
+                const icon = document.createElement('i');
+                icon.setAttribute('data-lucide', 'refresh-cw');
+                icon.style.width = '14px';
+                icon.style.height = '14px';
+                btn.appendChild(icon);
+                btn.appendChild(document.createTextNode(' Fetch'));
+                lucide.createIcons();
+            }
+        }
+
+        async function saveProviderSettings() {
+            const apiKey = document.getElementById('api-key').value.trim();
+            const model = document.getElementById('model-select').value;
+
+            if (!selectedProvider) {
+                showProviderError('Please select a provider');
+                return;
+            }
+
+            if (!apiKey) {
+                showProviderError('Please enter an API key');
+                return;
+            }
+
+            let baseUrl = selectedProviderUrl;
+            if (selectedProvider === 'custom') {
+                baseUrl = document.getElementById('custom-url').value.trim();
+                if (!baseUrl) {
+                    showProviderError('Please enter a custom API URL');
+                    return;
+                }
+            }
+
+            try {
+                const response = await fetch('/api/provider/configure', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider: selectedProvider,
+                        baseUrl: baseUrl,
+                        apiKey: apiKey,
+                        model: model
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showProviderSuccess('Provider settings saved successfully');
+                } else {
+                    showProviderError(result.error || 'Failed to save settings');
+                }
+            } catch (err) {
+                showProviderError('Connection error: ' + err.message);
+            }
+        }
+
+        async function saveDetectionSettings() {
+            const method = document.getElementById('detection-method').value;
+            const interval = parseInt(document.getElementById('check-interval').value) || 60;
+
+            try {
+                const response = await fetch('/api/provider/detection', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        method: method,
+                        interval: Math.max(10, Math.min(300, interval))
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showProviderSuccess('Detection settings saved successfully');
+                } else {
+                    showProviderError(result.error || 'Failed to save detection settings');
+                }
+            } catch (err) {
+                showProviderError('Connection error: ' + err.message);
+            }
+        }
+
+        function showProviderSuccess(msg) {
+            hideProviderMessages();
+            document.getElementById('provider-success').style.display = 'flex';
+            document.getElementById('provider-success-text').textContent = msg;
+            setTimeout(hideProviderMessages, 3000);
+        }
+
+        function showProviderError(msg) {
+            hideProviderMessages();
+            document.getElementById('provider-error').style.display = 'flex';
+            document.getElementById('provider-error-text').textContent = msg;
+        }
+
+        function hideProviderMessages() {
+            document.getElementById('provider-success').style.display = 'none';
+            document.getElementById('provider-error').style.display = 'none';
         }
 
         async function updateBotStatus() {
@@ -431,16 +846,9 @@
                 const response = await fetch('/api/bot/status');
                 const status = await response.json();
 
-                // Update Telegram status
                 if (status.telegram) {
-                    const state = status.telegram.connectionState || 'disconnected';
-
                     if (status.telegram.connected) {
                         updateTelegramStatus('connected', 'Connected');
-                    } else if (state === 'connecting') {
-                        updateTelegramStatus('connecting', 'Connecting...');
-                    } else if (state === 'reconnecting') {
-                        updateTelegramStatus('reconnecting', 'Reconnecting...');
                     } else if (status.telegram.enabled) {
                         updateTelegramStatus('disconnected', 'Configured');
                     } else {
@@ -480,7 +888,7 @@
 
                 if (result.success) {
                     updateTelegramStatus('connected', 'Connected');
-                    showTelegramSuccess(result.message || 'Bot configured successfully! Check your Telegram for a test message.');
+                    showTelegramSuccess(result.message || 'Bot configured successfully!');
                     document.getElementById('telegram-token-indicator').classList.add('active');
                     document.getElementById('telegram-users-indicator').classList.add('active');
                 } else {

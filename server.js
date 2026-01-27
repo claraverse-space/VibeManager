@@ -1288,6 +1288,140 @@ app.post('/api/bot/configure', async (req, res) => {
   }
 });
 
+// --- Provider Configuration APIs ---
+
+// Get provider configuration
+app.get('/api/provider/config', (req, res) => {
+  const config = botService.config.config;
+  res.json({
+    provider: config.provider?.name || '',
+    baseUrl: config.provider?.baseUrl || '',
+    apiKey: config.provider?.apiKey ? '***' + config.provider.apiKey.slice(-8) : '',
+    customUrl: config.provider?.customUrl || '',
+    model: config.provider?.model || '',
+    detection: config.detection || { method: 'both', interval: 60 }
+  });
+});
+
+// Configure provider
+app.post('/api/provider/configure', (req, res) => {
+  const { provider, baseUrl, apiKey, model } = req.body;
+
+  if (!provider || !apiKey) {
+    return res.status(400).json({ success: false, error: 'Provider and API key required' });
+  }
+
+  try {
+    botService.config.set('provider.name', provider);
+    botService.config.set('provider.baseUrl', baseUrl);
+    botService.config.set('provider.apiKey', apiKey);
+    botService.config.set('provider.model', model || '');
+
+    if (provider === 'custom') {
+      botService.config.set('provider.customUrl', baseUrl);
+    }
+
+    // Update summary generator config
+    if (summaryGenerator) {
+      summaryGenerator.configure({ baseUrl, apiKey, model });
+    }
+
+    res.json({ success: true, message: 'Provider configured successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Fetch models from provider
+app.post('/api/provider/models', async (req, res) => {
+  const { provider, baseUrl, apiKey } = req.body;
+
+  if (!baseUrl || !apiKey) {
+    return res.status(400).json({ success: false, error: 'Base URL and API key required' });
+  }
+
+  try {
+    const https = require('https');
+    const http = require('http');
+    const url = new URL(baseUrl + '/models');
+    const protocol = url.protocol === 'https:' ? https : http;
+
+    const options = {
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: url.pathname,
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + apiKey,
+        'Content-Type': 'application/json'
+      },
+      timeout: 15000
+    };
+
+    const request = protocol.request(options, (response) => {
+      let data = '';
+      response.on('data', chunk => data += chunk);
+      response.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.data && Array.isArray(json.data)) {
+            const models = json.data.map(m => ({
+              id: m.id,
+              name: m.id.split('/').pop()
+            })).sort((a, b) => a.name.localeCompare(b.name));
+            res.json({ success: true, models });
+          } else if (json.models && Array.isArray(json.models)) {
+            const models = json.models.map(m => ({
+              id: typeof m === 'string' ? m : m.id,
+              name: typeof m === 'string' ? m : (m.name || m.id)
+            })).sort((a, b) => a.name.localeCompare(b.name));
+            res.json({ success: true, models });
+          } else {
+            res.json({ success: false, error: 'Unexpected response format' });
+          }
+        } catch (e) {
+          res.json({ success: false, error: 'Failed to parse response: ' + e.message });
+        }
+      });
+    });
+
+    request.on('error', (err) => {
+      res.json({ success: false, error: 'Request failed: ' + err.message });
+    });
+
+    request.on('timeout', () => {
+      request.destroy();
+      res.json({ success: false, error: 'Request timed out' });
+    });
+
+    request.end();
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Configure task detection settings
+app.post('/api/provider/detection', (req, res) => {
+  const { method, interval } = req.body;
+
+  try {
+    botService.config.set('detection.method', method || 'both');
+    botService.config.set('detection.interval', Math.max(10, Math.min(300, interval || 60)));
+
+    // Update ralph loop detection settings
+    if (ralphLoop && ralphLoop.updateDetectionSettings) {
+      ralphLoop.updateDetectionSettings({
+        method: method || 'both',
+        interval: Math.max(10, Math.min(300, interval || 60))
+      });
+    }
+
+    res.json({ success: true, message: 'Detection settings saved' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // --- Summary APIs ---
 
 // Generate summary for a session
