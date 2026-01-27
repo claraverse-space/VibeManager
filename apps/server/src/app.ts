@@ -1,10 +1,13 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { serveStatic } from 'hono/bun';
 import api from './routes';
 import preview from './routes/preview';
 import { codeProxy } from './routes/code';
 import { authMiddleware } from './middleware/auth';
+import { existsSync } from 'fs';
+import { join } from 'path';
 
 const app = new Hono();
 
@@ -62,13 +65,31 @@ app.route('/preview', preview);
 // Code-server proxy route (for remote access to code-server)
 app.route('/code', codeProxy);
 
-// Health check at root
-app.get('/', (c) => {
-  return c.json({
-    name: 'VibeManager API',
-    version: '2.0.0',
-    status: 'ok',
+// Serve frontend static files
+const publicDir = join(import.meta.dir, '..', 'public');
+if (existsSync(publicDir)) {
+  // Serve static assets
+  app.use('/*', serveStatic({ root: publicDir }));
+
+  // SPA fallback - serve index.html for non-API routes
+  app.get('*', async (c) => {
+    const indexPath = join(publicDir, 'index.html');
+    if (existsSync(indexPath)) {
+      const html = await Bun.file(indexPath).text();
+      return c.html(html);
+    }
+    return c.json({ name: 'VibeManager API', version: '2.0.0', status: 'ok' });
   });
-});
+} else {
+  // No frontend built - show API info
+  app.get('/', (c) => {
+    return c.json({
+      name: 'VibeManager API',
+      version: '2.0.0',
+      status: 'ok',
+      note: 'Frontend not built. Run: bun run --filter @vibemanager/web build',
+    });
+  });
+}
 
 export default app;
