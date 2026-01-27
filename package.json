@@ -1,0 +1,38 @@
+{
+  "name": "vibemanager-v2",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "cli"
+  ],
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "dev:server": "bun run --filter @vibemanager/server dev",
+    "dev:web": "bun run --filter @vibemanager/web dev",
+    "build": "bun run --filter '*' build",
+    "test": "bun run --filter '*' test",
+    "test:e2e": "playwright test",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun run apps/server/src/db/migrate.ts",
+    "typecheck": "tsc --noEmit",
+    "cli": "bun run cli/src/index.ts",
+    "cli:build": "bun build cli/src/index.ts --compile --outfile dist/vibemanager"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.4",
+    "@typescript-eslint/eslint-plugin": "^8.24.0",
+    "@typescript-eslint/parser": "^8.24.0",
+    "drizzle-kit": "^0.30.4",
+    "eslint": "^9.20.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-react": "^7.37.4",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "prettier": "^3.5.1",
+    "typescript": "^5.7.3"
+  }
+}

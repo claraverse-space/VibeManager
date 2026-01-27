@@ -1,0 +1,290 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design System - Exact migration from VibeManager */
+:root {
+  /* Dark Mode (Default) */
+  --bg: #09090b;
+  --surface: #111113;
+  --surface2: #1a1a1f;
+  --surface3: #242429;
+  --accent: #6366f1;
+  --accent-dim: rgba(99, 102, 241, 0.12);
+  --accent-glow: rgba(99, 102, 241, 0.3);
+  --text: #ececf1;
+  --text-dim: #63636e;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --warn: #f59e0b;
+  --radius: 0px;
+}
+
+[data-theme="light"] {
+  --bg: #f8f8fa;
+  --surface: #ffffff;
+  --surface2: #f0f0f3;
+  --surface3: #e4e4e9;
+  --accent: #4f46e5;
+  --accent-dim: rgba(79, 70, 229, 0.08);
+  --accent-glow: rgba(79, 70, 229, 0.2);
+  --text: #1a1a2e;
+  --text-dim: #71717a;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --warn: #d97706;
+}
+
+/* Base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Satoshi', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--surface3);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* Button base styles */
+@layer components {
+  .btn {
+    @apply bg-surface-2 text-text-primary border-none py-[7px] px-[14px] cursor-pointer text-[13px] font-medium whitespace-nowrap;
+    border-radius: 0;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s, transform 0.1s;
+  }
+
+  .btn:hover {
+    background: var(--accent-glow);
+  }
+
+  .btn:active {
+    transform: scale(0.96);
+  }
+
+  .btn-primary {
+    @apply bg-accent text-white;
+  }
+
+  .btn-danger {
+    @apply bg-surface-2 text-text-dim;
+  }
+
+  .btn-danger:hover {
+    @apply bg-danger text-white;
+  }
+
+  .btn-success {
+    @apply bg-surface-2 text-success;
+  }
+
+  .btn-success:hover {
+    background: rgba(34, 197, 94, 0.15);
+  }
+
+  /* Card styles */
+  .card {
+    @apply bg-surface p-4;
+    border-radius: 0;
+    transition: background 0.15s;
+  }
+
+  .card:hover {
+    @apply bg-surface-2;
+  }
+
+  /* Input styles */
+  .input {
+    @apply bg-bg text-text-primary py-[5px] px-[10px] text-[12px] outline-none border-none;
+    border-radius: 0;
+    font-family: monospace;
+  }
+
+  .input:focus {
+    box-shadow: 0 0 0 1px var(--accent-glow);
+  }
+
+  .input::placeholder {
+    color: var(--text-dim);
+  }
+
+  /* Status dot */
+  .status-dot {
+    @apply w-2 h-2 rounded-full flex-shrink-0;
+    background: var(--text-dim);
+  }
+
+  .status-dot.alive {
+    background: var(--success);
+    box-shadow: 0 0 8px rgba(77, 255, 145, 0.4);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  .status-dot.dead {
+    background: var(--text-dim);
+  }
+
+  /* Activity state colors */
+  .status-dot.bg-success {
+    background: var(--success);
+    box-shadow: 0 0 8px rgba(77, 255, 145, 0.4);
+  }
+
+  .status-dot.bg-warn {
+    background: var(--warn);
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.3);
+  }
+
+  .status-dot.bg-accent {
+    background: var(--accent);
+    box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+  }
+
+  /* View tabs */
+  .view-tab {
+    @apply flex-1 py-[6px] px-3 text-center text-[11px] font-semibold uppercase tracking-wider cursor-pointer border-none bg-transparent text-text-dim;
+    border-radius: 0;
+    -webkit-tap-highlight-color: transparent;
+    transition: all 0.2s;
+  }
+
+  .view-tab.active {
+    @apply text-text-primary bg-surface-2;
+  }
+
+  .view-tab:hover:not(.active) {
+    @apply text-text-primary;
+  }
+
+  /* System monitor bar */
+  .sysmon-bar {
+    @apply h-[14px] font-mono text-[12px] leading-[14px] overflow-hidden whitespace-nowrap;
+    letter-spacing: -0.5px;
+  }
+
+  .sysmon-bar .filled {
+    color: var(--accent);
+  }
+
+  .sysmon-bar .empty {
+    color: var(--surface2);
+  }
+
+  .sysmon-bar.hot .filled {
+    color: var(--danger);
+  }
+
+  .sysmon-bar.warm .filled {
+    color: var(--warn);
+  }
+
+  .sysmon-bar.cool .filled {
+    color: var(--success);
+  }
+
+  /* Virtual keyboard key */
+  .vkey {
+    @apply bg-surface-2 text-text-dim border-none py-[5px] px-[10px] text-[11px] font-mono font-medium cursor-pointer whitespace-nowrap select-none flex-shrink-0;
+    border-radius: 0;
+    -webkit-tap-highlight-color: transparent;
+    transition: all 0.12s;
+  }
+
+  .vkey:active {
+    @apply bg-accent text-white;
+    transform: scale(0.93);
+  }
+
+  .vkey.sticky.active {
+    @apply bg-danger text-white;
+  }
+}
+
+/* Animation keyframes */
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes co-pulse {
+  0%, 100% {
+    opacity: 0.2;
+    transform: scaleY(0.6);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+/* Fast pulse for active state */
+@keyframes pulse-fast {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.animate-pulse-fast {
+  animation: pulse-fast 1s ease-in-out infinite;
+}
+
+/* Slow pulse for waiting state */
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.2);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 1.5s ease-in-out infinite;
+}
+
+/* XTerm overrides */
+.xterm {
+  padding: 4px 2px;
+}
