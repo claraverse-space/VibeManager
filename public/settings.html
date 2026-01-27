@@ -11,9 +11,39 @@
             box-sizing: border-box;
         }
 
+        :root {
+            --bg: #09090b;
+            --surface: #111113;
+            --surface2: #1a1a1f;
+            --surface3: #242429;
+            --accent: #6366f1;
+            --accent-dim: rgba(99, 102, 241, 0.12);
+            --text: #ececf1;
+            --text-dim: #63636e;
+            --danger: #ef4444;
+            --success: #22c55e;
+            --warn: #f59e0b;
+            --radius: 0px;
+        }
+
+        [data-theme="light"] {
+            --bg: #f8f8fa;
+            --surface: #ffffff;
+            --surface2: #f0f0f3;
+            --surface3: #e4e4e9;
+            --accent: #4f46e5;
+            --accent-dim: rgba(79, 70, 229, 0.08);
+            --text: #1a1a2e;
+            --text-dim: #71717a;
+            --danger: #dc2626;
+            --success: #16a34a;
+            --warn: #d97706;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--bg);
+            color: var(--text);
             min-height: 100vh;
             padding: 20px;
         }
@@ -24,36 +54,36 @@
         }
 
         .header {
-            background: white;
+            background: var(--surface);
             padding: 20px;
             border-radius: 12px;
             margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 1px solid var(--surface3);
         }
 
         .header h1 {
             font-size: 24px;
-            color: #333;
+            color: var(--text);
             margin-bottom: 5px;
         }
 
         .header p {
-            color: #666;
+            color: var(--text-dim);
             font-size: 14px;
         }
 
         .card {
-            background: white;
+            background: var(--surface);
             border-radius: 12px;
             padding: 24px;
             margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 1px solid var(--surface3);
         }
 
         .card h2 {
             font-size: 20px;
             margin-bottom: 16px;
-            color: #333;
+            color: var(--text);
             display: flex;
             align-items: center;
             gap: 8px;
@@ -67,33 +97,41 @@
             display: block;
             margin-bottom: 8px;
             font-weight: 600;
-            color: #333;
+            color: var(--text);
             font-size: 14px;
         }
 
         .form-group input {
             width: 100%;
             padding: 12px;
-            border: 2px solid #e0e0e0;
+            background: var(--surface2);
+            border: 1px solid var(--surface3);
             border-radius: 8px;
             font-size: 14px;
+            color: var(--text);
             font-family: 'Courier New', monospace;
-            transition: border-color 0.3s;
+            transition: all 0.3s;
         }
 
         .form-group input:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--accent);
+            background: var(--surface3);
+        }
+
+        .form-group input::placeholder {
+            color: var(--text-dim);
+            opacity: 0.5;
         }
 
         .form-group .hint {
             font-size: 12px;
-            color: #666;
+            color: var(--text-dim);
             margin-top: 4px;
         }
 
         .form-group .hint a {
-            color: #667eea;
+            color: var(--accent);
             text-decoration: none;
         }
 
@@ -115,23 +153,23 @@
         }
 
         .btn-primary {
-            background: #667eea;
+            background: var(--accent);
             color: white;
         }
 
-        .btn-primary:hover {
-            background: #5568d3;
+        .btn-primary:hover:not(:disabled) {
+            background: #5558e3;
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
         }
 
         .btn-secondary {
-            background: #f0f0f0;
-            color: #333;
+            background: var(--surface2);
+            color: var(--text);
+            border: 1px solid var(--surface3);
         }
 
-        .btn-secondary:hover {
-            background: #e0e0e0;
+        .btn-secondary:hover:not(:disabled) {
+            background: var(--surface3);
         }
 
         .btn:disabled {
@@ -149,13 +187,15 @@
         }
 
         .status.success {
-            background: #d1fae5;
-            color: #065f46;
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(34, 197, 94, 0.2);
         }
 
         .status.error {
-            background: #fee2e2;
-            color: #991b1b;
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.2);
         }
 
         .button-group {
@@ -165,16 +205,17 @@
         }
 
         .steps {
-            background: #f9fafb;
+            background: var(--surface2);
             padding: 16px;
             border-radius: 8px;
             margin-bottom: 20px;
+            border: 1px solid var(--surface3);
         }
 
         .steps h3 {
             font-size: 14px;
             margin-bottom: 12px;
-            color: #333;
+            color: var(--text);
         }
 
         .steps ol {
@@ -183,43 +224,40 @@
 
         .steps li {
             margin-bottom: 8px;
-            color: #666;
+            color: var(--text-dim);
             font-size: 14px;
         }
 
         .steps code {
-            background: #e5e7eb;
+            background: var(--surface3);
             padding: 2px 6px;
             border-radius: 4px;
             font-size: 13px;
+            color: var(--accent);
+        }
+
+        .steps a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .steps a:hover {
+            text-decoration: underline;
         }
 
         .back-link {
             display: inline-flex;
             align-items: center;
             gap: 4px;
-            color: white;
+            color: var(--text);
             text-decoration: none;
             margin-bottom: 20px;
             font-size: 14px;
+            transition: color 0.3s;
         }
 
         .back-link:hover {
-            text-decoration: underline;
-        }
-
-        .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            color: var(--accent);
         }
 
         .connection-status {
@@ -233,18 +271,35 @@
         }
 
         .connection-status.connected {
-            background: #d1fae5;
-            color: #065f46;
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--success);
         }
 
         .connection-status.disconnected {
-            background: #fee2e2;
-            color: #991b1b;
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger);
         }
 
         .connection-status.pending {
-            background: #fef3c7;
-            color: #92400e;
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--warn);
+        }
+
+        .config-indicator {
+            font-size: 12px;
+            color: var(--success);
+            margin-top: 4px;
+            display: none;
+        }
+
+        .config-indicator.active {
+            display: block;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-dim);
         }
     </style>
 </head>
@@ -295,6 +350,7 @@
                     spellcheck="false"
                 >
                 <div class="hint">Get from <a href="https://t.me/BotFather" target="_blank">@BotFather</a></div>
+                <div id="telegram-token-indicator" class="config-indicator">✓ Token configured</div>
             </div>
 
             <div class="form-group">
@@ -307,6 +363,7 @@
                     spellcheck="false"
                 >
                 <div class="hint">Get from <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a> (just the number)</div>
+                <div id="telegram-users-indicator" class="config-indicator">✓ Users configured</div>
             </div>
 
             <div class="button-group">
@@ -358,6 +415,7 @@
                     spellcheck="false"
                 >
                 <div class="hint">Get from <a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a></div>
+                <div id="discord-token-indicator" class="config-indicator">✓ Token configured</div>
             </div>
 
             <div class="form-group">
@@ -370,6 +428,7 @@
                     spellcheck="false"
                 >
                 <div class="hint">Right-click your username in Discord → Copy User ID (enable Developer Mode first)</div>
+                <div id="discord-users-indicator" class="config-indicator">✓ Users configured</div>
             </div>
 
             <div class="button-group">
@@ -384,6 +443,78 @@
     </div>
 
     <script>
+        // Load existing configuration on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadBotConfig();
+            await updateBotStatus();
+        });
+
+        async function loadBotConfig() {
+            try {
+                const response = await fetch('/api/bot/config');
+                const config = await response.json();
+
+                // Load Telegram config
+                if (config.telegram) {
+                    if (config.telegram.token) {
+                        document.getElementById('telegram-token').value = config.telegram.token;
+                        document.getElementById('telegram-token').placeholder = 'Token configured (shown masked)';
+                        document.getElementById('telegram-token-indicator').classList.add('active');
+                    }
+                    if (config.telegram.allowedUsers && config.telegram.allowedUsers.length > 0) {
+                        document.getElementById('telegram-users').value = config.telegram.allowedUsers.join(', ');
+                        document.getElementById('telegram-users-indicator').classList.add('active');
+                    }
+                }
+
+                // Load Discord config
+                if (config.discord) {
+                    if (config.discord.token) {
+                        document.getElementById('discord-token').value = config.discord.token;
+                        document.getElementById('discord-token').placeholder = 'Token configured (shown masked)';
+                        document.getElementById('discord-token-indicator').classList.add('active');
+                    }
+                    if (config.discord.allowedUsers && config.discord.allowedUsers.length > 0) {
+                        document.getElementById('discord-users').value = config.discord.allowedUsers.join(', ');
+                        document.getElementById('discord-users-indicator').classList.add('active');
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to load bot config:', err);
+            }
+        }
+
+        async function updateBotStatus() {
+            try {
+                const response = await fetch('/api/bot/status');
+                const status = await response.json();
+
+                // Update Telegram status
+                if (status.telegram) {
+                    if (status.telegram.enabled && status.telegram.connected) {
+                        updateTelegramStatus('connected', 'Connected');
+                    } else if (status.telegram.enabled) {
+                        updateTelegramStatus('pending', 'Enabled');
+                    } else {
+                        updateTelegramStatus('disconnected', 'Not Configured');
+                    }
+                }
+
+                // Update Discord status
+                if (status.discord) {
+                    if (status.discord.enabled && status.discord.connected) {
+                        updateDiscordStatus('connected', 'Connected');
+                    } else if (status.discord.enabled) {
+                        updateDiscordStatus('pending', 'Enabled');
+                    } else {
+                        updateDiscordStatus('disconnected', 'Not Configured');
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to update bot status:', err);
+            }
+        }
+
         async function saveTelegramBot() {
             const token = document.getElementById('telegram-token').value.trim();
             const users = document.getElementById('telegram-users').value.trim();
@@ -413,6 +544,8 @@
                 if (result.success) {
                     updateTelegramStatus('connected', 'Connected');
                     showTelegramSuccess(result.message || 'Bot configured successfully! Check your Telegram for a test message.');
+                    document.getElementById('telegram-token-indicator').classList.add('active');
+                    document.getElementById('telegram-users-indicator').classList.add('active');
                 } else {
                     updateTelegramStatus('disconnected', 'Error');
                     showTelegramError(result.error || 'Failed to configure bot');
@@ -455,6 +588,8 @@
                 if (result.success) {
                     updateDiscordStatus('connected', 'Connected');
                     showDiscordSuccess(result.message || 'Bot configured successfully! Check your Discord DMs for a test message.');
+                    document.getElementById('discord-token-indicator').classList.add('active');
+                    document.getElementById('discord-users-indicator').classList.add('active');
                 } else {
                     updateDiscordStatus('disconnected', 'Error');
                     showDiscordError(result.error || 'Failed to configure bot');
@@ -471,15 +606,21 @@
         function clearTelegramBot() {
             document.getElementById('telegram-token').value = '';
             document.getElementById('telegram-users').value = '';
+            document.getElementById('telegram-token').placeholder = '1234567890:ABCdefGHIjklMNOpqrsTUVwxyz123456789';
             updateTelegramStatus('disconnected', 'Not Configured');
             hideTelegramMessages();
+            document.getElementById('telegram-token-indicator').classList.remove('active');
+            document.getElementById('telegram-users-indicator').classList.remove('active');
         }
 
         function clearDiscordBot() {
             document.getElementById('discord-token').value = '';
             document.getElementById('discord-users').value = '';
+            document.getElementById('discord-token').placeholder = 'MTQ2NTU0NDcxNTUyMzg1NDM4Nw.GcIoOs.xyz123...';
             updateDiscordStatus('disconnected', 'Not Configured');
             hideDiscordMessages();
+            document.getElementById('discord-token-indicator').classList.remove('active');
+            document.getElementById('discord-users-indicator').classList.remove('active');
         }
 
         function updateTelegramStatus(status, text) {
