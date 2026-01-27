@@ -59,29 +59,22 @@ class RalphLoop extends EventEmitter {
     const config = this.getProviderConfig();
     if (!config) return null;
 
-    const prompt = `You are analyzing the output of an AI coding session to determine if a task has been completed.
+    // Use a concise prompt to save tokens
+    const prompt = `Task: "${currentTask.title}"
 
-TASK: ${currentTask.title}
-${currentTask.description ? `DESCRIPTION: ${currentTask.description}` : ''}
+Output log:
+${logs.slice(-2000)}
 
-RECENT OUTPUT (last 100 lines):
-\`\`\`
-${logs}
-\`\`\`
+Is this task completed? Check for: git commits, passing tests, "DONE" signal, or completion messages.
 
-Analyze the output and determine the task status. Look for:
-- Successful git commits
-- Test results (passing/failing)
-- Error messages or failures
-- Completion signals like "DONE", "Task completed"
-- Evidence that the requested changes were made
-
-Respond with ONLY a JSON object (no markdown, no explanation):
-{"status": "completed" | "in_progress" | "error" | "blocked", "confidence": 0.0-1.0, "reason": "brief explanation"}`;
+Reply ONLY with JSON: {"status":"completed"|"in_progress"|"error","confidence":0.0-1.0,"reason":"why"}`;
 
     try {
-      const response = await this.callLLM(config, prompt);
+      let response = await this.callLLM(config, prompt);
       if (!response) return null;
+
+      // Strip markdown code fences if present
+      response = response.replace(/```json\n?/g, '').replace(/```\n?/g, '');
 
       // Parse JSON response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -106,7 +99,7 @@ Respond with ONLY a JSON object (no markdown, no explanation):
       const body = JSON.stringify({
         model: config.model,
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 200,
+        max_tokens: 500,
         temperature: 0.1
       });
 
@@ -130,7 +123,17 @@ Respond with ONLY a JSON object (no markdown, no explanation):
           try {
             const json = JSON.parse(data);
             if (json.choices && json.choices[0] && json.choices[0].message) {
-              resolve(json.choices[0].message.content);
+              // Get content, or fall back to reasoning_content for some providers
+              let content = json.choices[0].message.content;
+              if (!content && json.choices[0].message.reasoning_content) {
+                // Some models put reasoning in a separate field, try to extract JSON from it
+                const reasoning = json.choices[0].message.reasoning_content;
+                const jsonMatch = reasoning.match(/\{[\s\S]*?"status"[\s\S]*?\}/);
+                if (jsonMatch) {
+                  content = jsonMatch[0];
+                }
+              }
+              resolve(content || null);
             } else if (json.error) {
               reject(new Error(json.error.message || 'API error'));
             } else {

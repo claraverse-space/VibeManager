@@ -1,8 +1,8 @@
 {
   "version": "1.0",
   "status": "in_progress",
-  "task": "llm-task-detection",
+  "task": "configure-test-zai",
   "progress": 10,
-  "currentStep": "Implementing LLM-based task detection",
-  "timestamp": "2026-01-27T07:35:00.000Z"
+  "currentStep": "Configuring Z.AI provider",
+  "timestamp": "2026-01-27T07:50:00.000Z"
 }
