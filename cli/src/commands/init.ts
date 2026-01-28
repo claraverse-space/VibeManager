@@ -1,7 +1,49 @@
 import { Command } from 'commander';
 import { checkAllDependencies, getDataDir } from '../lib/deps';
 import { startServer, checkHealth } from '../lib/process';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
+
+const CODE_SERVER_PORT = 8443;
+
+/**
+ * Configure code-server to use a port that doesn't conflict with VibeManager
+ */
+function configureCodeServer(vibemanagerPort: number): void {
+  const configDir = join(homedir(), '.config', 'code-server');
+  const configPath = join(configDir, 'config.yaml');
+
+  // Ensure config directory exists
+  if (!existsSync(configDir)) {
+    mkdirSync(configDir, { recursive: true });
+  }
+
+  // Check if config exists and has conflicting port
+  if (existsSync(configPath)) {
+    const config = readFileSync(configPath, 'utf-8');
+    // Check if the config has bind-addr with our port
+    if (config.includes(`bind-addr: 127.0.0.1:${vibemanagerPort}`) ||
+        config.includes(`bind-addr: 0.0.0.0:${vibemanagerPort}`)) {
+      console.log(`\nUpdating code-server config (port conflict with ${vibemanagerPort})...`);
+      const newConfig = config.replace(
+        /bind-addr:\s*[\d\.]+:\d+/,
+        `bind-addr: 127.0.0.1:${CODE_SERVER_PORT}`
+      );
+      writeFileSync(configPath, newConfig);
+      console.log(`  ✓ code-server configured to use port ${CODE_SERVER_PORT}`);
+    }
+  } else {
+    // Create a new config file
+    console.log('\nCreating code-server config...');
+    const config = `bind-addr: 127.0.0.1:${CODE_SERVER_PORT}
+auth: none
+cert: false
+`;
+    writeFileSync(configPath, config);
+    console.log(`  ✓ code-server configured to use port ${CODE_SERVER_PORT}`);
+  }
+}
 
 export const initCommand = new Command('init')
   .description('Initialize VibeManager (first-time setup)')
@@ -13,11 +55,16 @@ export const initCommand = new Command('init')
     console.log('Checking dependencies:');
     const deps = checkAllDependencies();
     let allInstalled = true;
+    let codeServerInstalled = false;
 
     for (const dep of deps) {
       const status = dep.installed ? '✓' : '✗';
       const version = dep.version ? ` (${dep.version})` : '';
       console.log(`  ${status} ${dep.name}${version}`);
+
+      if (dep.name === 'code-server' && dep.installed) {
+        codeServerInstalled = true;
+      }
 
       if (!dep.installed && dep.name !== 'code-server') {
         allInstalled = false;
@@ -34,6 +81,13 @@ export const initCommand = new Command('init')
       process.exit(1);
     }
 
+    const port = parseInt(options.port, 10);
+
+    // Configure code-server if installed
+    if (codeServerInstalled) {
+      configureCodeServer(port);
+    }
+
     // Create data directory
     const dataDir = getDataDir();
     if (!existsSync(dataDir)) {
@@ -43,7 +97,6 @@ export const initCommand = new Command('init')
 
     // Run migrations (the server will run migrations on startup)
     console.log('\nRunning database migrations...');
-    const port = parseInt(options.port, 10);
     console.log(`\nStarting VibeManager on port ${port}...`);
 
     const child = startServer(port);
