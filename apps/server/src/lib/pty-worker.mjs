@@ -1,6 +1,54 @@
 #!/usr/bin/env node
 // PTY worker that runs in Node.js to avoid Bun's PTY issues
-import * as pty from 'node-pty';
+import { createRequire } from 'module';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+import { existsSync, readdirSync } from 'fs';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Find node-pty module - Bun installs it in .bun directory
+function findNodePty() {
+  const searchPaths = [
+    // Standard location
+    join(__dirname, '..', '..', '..', '..', 'node_modules', 'node-pty'),
+    // Bun's .bun cache
+    join(__dirname, '..', '..', '..', '..', 'node_modules', '.bun'),
+  ];
+
+  for (const searchPath of searchPaths) {
+    if (!existsSync(searchPath)) continue;
+
+    // Direct node-pty path
+    if (searchPath.endsWith('node-pty') && existsSync(join(searchPath, 'lib', 'index.js'))) {
+      return searchPath;
+    }
+
+    // Search in .bun directory for node-pty
+    if (searchPath.endsWith('.bun')) {
+      try {
+        const entries = readdirSync(searchPath);
+        for (const entry of entries) {
+          if (entry.startsWith('node-pty@')) {
+            const ptyPath = join(searchPath, entry, 'node_modules', 'node-pty');
+            if (existsSync(join(ptyPath, 'lib', 'index.js'))) {
+              return ptyPath;
+            }
+          }
+        }
+      } catch (e) {
+        // Ignore read errors
+      }
+    }
+  }
+
+  // Fallback to standard require resolution
+  return 'node-pty';
+}
+
+const ptyPath = findNodePty();
+const require = createRequire(import.meta.url);
+const pty = require(ptyPath);
 
 const [,, tmuxSession, cols, rows, tmuxPath] = process.argv;
 

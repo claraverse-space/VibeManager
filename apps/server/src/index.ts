@@ -2,6 +2,10 @@ import app from './app';
 import { handleUpgrade, handleOpen, handleMessage, handleClose, type WebSocketData } from './ws/handler';
 import { DEFAULT_PORT } from '@vibemanager/shared';
 import { codeServerService } from './services/CodeServerService';
+import { fixPtyPermissions } from './lib/fix-pty-permissions';
+
+// Fix node-pty permissions on macOS (must run before any PTY operations)
+fixPtyPermissions();
 
 // Run migrations on startup
 import './db/migrate';
