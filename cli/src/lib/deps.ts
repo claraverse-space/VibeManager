@@ -1,4 +1,4 @@
-import { execFileSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -81,6 +81,39 @@ export function checkCodeServer(): DependencyCheck {
   }
 
   return { name: 'code-server', installed: false };
+}
+
+/**
+ * Install code-server using the official install script
+ */
+export function installCodeServer(): boolean {
+  console.log('Installing code-server...');
+
+  try {
+    // Use the official install script
+    const result = spawnSync('sh', ['-c', 'curl -fsSL https://code-server.dev/install.sh | sh'], {
+      stdio: 'inherit',
+      timeout: 300000, // 5 minute timeout
+    });
+
+    if (result.status !== 0) {
+      console.error('code-server installation failed');
+      return false;
+    }
+
+    // Verify installation
+    const check = checkCodeServer();
+    if (check.installed) {
+      console.log(`  ✓ code-server installed successfully (${check.version || 'version unknown'})`);
+      return true;
+    } else {
+      console.error('code-server installation completed but binary not found');
+      return false;
+    }
+  } catch (err) {
+    console.error('Failed to install code-server:', err);
+    return false;
+  }
 }
 
 /**

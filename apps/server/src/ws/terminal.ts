@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'child_process';
 import { createInterface } from 'readline';
 import { sessionService } from '../services/SessionService';
 import { getTmuxSessionName } from '../lib/tmux';
+import { findTmux } from '../lib/tools';
 import { DEFAULT_COLS, DEFAULT_ROWS } from '@vibemanager/shared';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -45,7 +46,8 @@ export async function handleTerminalConnection(
 
   // Spawn Node.js PTY worker process
   const tmuxSession = getTmuxSessionName(session.name);
-  const worker = spawn('node', [PTY_WORKER, tmuxSession, String(cols), String(rows)], {
+  const tmuxPath = findTmux();
+  const worker = spawn('node', [PTY_WORKER, tmuxSession, String(cols), String(rows), tmuxPath], {
     stdio: ['pipe', 'pipe', 'pipe'],
     cwd: session.projectPath,
     env: { ...process.env, TERM: 'xterm-256color' },

@@ -2,9 +2,9 @@
 // PTY worker that runs in Node.js to avoid Bun's PTY issues
 import * as pty from 'node-pty';
 
-const [,, tmuxSession, cols, rows] = process.argv;
+const [,, tmuxSession, cols, rows, tmuxPath] = process.argv;
 
-const terminal = pty.spawn('/usr/bin/tmux', ['-u', 'attach-session', '-t', tmuxSession], {
+const terminal = pty.spawn(tmuxPath || '/usr/bin/tmux', ['-u', 'attach-session', '-t', tmuxSession], {
   name: 'xterm-256color',
   cols: parseInt(cols) || 120,
   rows: parseInt(rows) || 30,

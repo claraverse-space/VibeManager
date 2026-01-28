@@ -1,9 +1,29 @@
 import { Command } from 'commander';
-import { checkAllDependencies, getDataDir } from '../lib/deps';
+import { checkAllDependencies, getDataDir, installCodeServer } from '../lib/deps';
 import { startServer, checkHealth } from '../lib/process';
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { createInterface } from 'readline';
+
+/**
+ * Prompt user for yes/no confirmation
+ */
+async function promptYesNo(question: string): Promise<boolean> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      const normalized = answer.toLowerCase().trim();
+      // Default to yes if empty, or explicitly y/yes
+      resolve(normalized === '' || normalized === 'y' || normalized === 'yes');
+    });
+  });
+}
 
 const CODE_SERVER_PORT = 8443;
 
@@ -79,6 +99,17 @@ export const initCommand = new Command('init')
         }
       }
       process.exit(1);
+    }
+
+    // Offer to install code-server if not present
+    if (!codeServerInstalled) {
+      console.log('\ncode-server enables the integrated code editor.');
+      const shouldInstall = await promptYesNo('Install code-server? [Y/n] ');
+      if (shouldInstall) {
+        codeServerInstalled = installCodeServer();
+      } else {
+        console.log('  Skipping code-server installation.');
+      }
     }
 
     const port = parseInt(options.port, 10);
