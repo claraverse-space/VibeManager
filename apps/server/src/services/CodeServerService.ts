@@ -129,14 +129,15 @@ class CodeServerService {
     try {
       console.log(`Starting code-server: ${CODE_SERVER_PATH} ${args.join(' ')}`);
 
+      // Remove PORT from environment so code-server doesn't try to use it
+      const env = { ...process.env };
+      delete env.PORT;
+      env.DISABLE_UPDATE_CHECK = 'true';
+
       this.process = spawn(CODE_SERVER_PATH, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: true,
-        env: {
-          ...process.env,
-          // Disable update checks
-          DISABLE_UPDATE_CHECK: 'true',
-        },
+        env,
       });
 
       this.process.stdout?.on('data', (data) => {
