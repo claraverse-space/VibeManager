@@ -3,17 +3,46 @@
 import { createRequire } from 'module';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, readdirSync } from 'fs';
+import { existsSync, readdirSync, chmodSync, statSync } from 'fs';
+import { homedir } from 'os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// Fix spawn-helper permissions if needed (macOS only)
+function fixSpawnHelperPermissions(nodePtyPath) {
+  if (process.platform !== 'darwin') return;
+  
+  const prebuildsDir = join(nodePtyPath, 'prebuilds');
+  if (!existsSync(prebuildsDir)) return;
+  
+  for (const arch of ['darwin-arm64', 'darwin-x64']) {
+    const spawnHelper = join(prebuildsDir, arch, 'spawn-helper');
+    if (existsSync(spawnHelper)) {
+      try {
+        const stats = statSync(spawnHelper);
+        if ((stats.mode & 0o100) === 0) {
+          chmodSync(spawnHelper, stats.mode | 0o111);
+        }
+      } catch (e) {
+        // Ignore permission errors
+      }
+    }
+  }
+}
+
 // Find node-pty module - Bun installs it in .bun directory
 function findNodePty() {
+  // Calculate project root from this file's location
+  // This file is at: <root>/apps/server/src/lib/pty-worker.mjs
+  const projectRoot = join(__dirname, '..', '..', '..', '..');
+  
   const searchPaths = [
-    // Standard location
-    join(__dirname, '..', '..', '..', '..', 'node_modules', 'node-pty'),
-    // Bun's .bun cache
-    join(__dirname, '..', '..', '..', '..', 'node_modules', '.bun'),
+    // Project root (most reliable, based on this file's location)
+    join(projectRoot, 'node_modules', 'node-pty'),
+    join(projectRoot, 'node_modules', '.bun'),
+    // Installed location (fallback)
+    join(homedir(), '.local', 'share', 'vibemanager', 'source', 'node_modules', 'node-pty'),
+    join(homedir(), '.local', 'share', 'vibemanager', 'source', 'node_modules', '.bun'),
   ];
 
   for (const searchPath of searchPaths) {
@@ -47,6 +76,12 @@ function findNodePty() {
 }
 
 const ptyPath = findNodePty();
+
+// Fix spawn-helper permissions before loading (critical for macOS)
+if (ptyPath !== 'node-pty') {
+  fixSpawnHelperPermissions(ptyPath);
+}
+
 const require = createRequire(import.meta.url);
 const pty = require(ptyPath);
 

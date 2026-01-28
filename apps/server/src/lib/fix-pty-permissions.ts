@@ -1,5 +1,11 @@
 import { chmodSync, existsSync, readdirSync, statSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { homedir } from 'os';
+
+// Get the directory of this file reliably
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * Fix node-pty spawn-helper permissions on macOS
@@ -13,13 +19,19 @@ export function fixPtyPermissions(): void {
     return;
   }
 
+  // Calculate project root from this file's location
+  // This file is at: <root>/apps/server/src/lib/fix-pty-permissions.ts
+  const projectRoot = join(__dirname, '..', '..', '..', '..');
+  
   const possiblePaths = [
-    // Bun's module cache location
+    // Project root node_modules (most reliable)
+    join(projectRoot, 'node_modules', '.bun'),
+    join(projectRoot, 'node_modules', 'node-pty', 'prebuilds'),
+    // Installed location
+    join(homedir(), '.local', 'share', 'vibemanager', 'source', 'node_modules', '.bun'),
+    // Fallback to cwd-based paths
     join(process.cwd(), 'node_modules', '.bun'),
-    // Standard node_modules
     join(process.cwd(), 'node_modules', 'node-pty', 'prebuilds'),
-    // Workspace root
-    join(process.cwd(), '..', '..', 'node_modules', '.bun'),
   ];
 
   for (const basePath of possiblePaths) {
