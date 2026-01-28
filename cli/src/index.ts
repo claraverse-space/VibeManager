@@ -5,6 +5,7 @@ import { startCommand } from './commands/start';
 import { stopCommand } from './commands/stop';
 import { statusCommand } from './commands/status';
 import { updateCommand } from './commands/update';
+import { uninstallCommand } from './commands/uninstall';
 
 const program = new Command();
 
@@ -19,5 +20,6 @@ program.addCommand(startCommand);
 program.addCommand(stopCommand);
 program.addCommand(statusCommand);
 program.addCommand(updateCommand);
+program.addCommand(uninstallCommand);
 
 program.parse();
