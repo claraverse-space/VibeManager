@@ -112,9 +112,9 @@ export default function CodeView() {
     );
   }
 
-  // Build direct URL to code-server
+  // Build URL to code-server via proxy (works for remote access)
   const codeServerUrl = codeServerPort
-    ? `http://${window.location.hostname}:${codeServerPort}/?folder=${encodeURIComponent(currentSession.projectPath || '')}`
+    ? `${window.location.origin}/code/?folder=${encodeURIComponent(currentSession.projectPath || '')}`
     : '';
 
   return (
