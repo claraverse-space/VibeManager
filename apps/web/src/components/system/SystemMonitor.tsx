@@ -79,8 +79,8 @@ export default function SystemMonitor() {
         <div className="flex flex-col gap-1">
           <div className="text-[11px] text-text-dim">Network</div>
           <div className="font-mono text-[11px] flex gap-3">
-            <span className="text-success">↓ {formatBytes(systemStats.network.rx)}</span>
-            <span className="text-accent">↑ {formatBytes(systemStats.network.tx)}</span>
+            <span className="text-success">↓ {formatBytes(systemStats.network.rx)}/s</span>
+            <span className="text-accent">↑ {formatBytes(systemStats.network.tx)}/s</span>
           </div>
         </div>
 
