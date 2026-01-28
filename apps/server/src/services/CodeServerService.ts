@@ -1,16 +1,50 @@
-import { spawn, type ChildProcess } from 'child_process';
+import { spawn, execFileSync, type ChildProcess } from 'child_process';
 import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { createServer } from 'net';
 
 const CODE_SERVER_PREFERRED_PORT = 8443;
-const CODE_SERVER_PATH = join(homedir(), '.local', 'bin', 'code-server');
+
+/**
+ * Find code-server binary in common locations
+ */
+function findCodeServerPath(): string | null {
+  const paths = [
+    join(homedir(), '.local', 'bin', 'code-server'),
+    '/opt/homebrew/bin/code-server',  // macOS Homebrew (Apple Silicon)
+    '/usr/local/bin/code-server',      // macOS Homebrew (Intel) / Linux
+    '/usr/bin/code-server',
+  ];
+
+  for (const path of paths) {
+    if (existsSync(path)) {
+      return path;
+    }
+  }
+
+  // Fallback: try 'which' command
+  try {
+    const whichPath = execFileSync('which', ['code-server'], {
+      encoding: 'utf-8',
+      timeout: 5000,
+    }).trim();
+
+    if (whichPath && existsSync(whichPath)) {
+      return whichPath;
+    }
+  } catch {
+    // which failed
+  }
+
+  return null;
+}
 
 class CodeServerService {
   private process: ChildProcess | null = null;
   private isRunning = false;
   private actualPort: number | null = null;
+  private codeServerPath: string | null = null;
 
   /**
    * Find an available port starting from the preferred port
@@ -93,8 +127,9 @@ class CodeServerService {
     }
 
     // Check if code-server exists
-    if (!existsSync(CODE_SERVER_PATH)) {
-      console.warn('code-server not found at', CODE_SERVER_PATH);
+    this.codeServerPath = findCodeServerPath();
+    if (!this.codeServerPath) {
+      console.warn('code-server not found');
       return false;
     }
 
@@ -127,14 +162,14 @@ class CodeServerService {
     }
 
     try {
-      console.log(`Starting code-server: ${CODE_SERVER_PATH} ${args.join(' ')}`);
+      console.log(`Starting code-server: ${this.codeServerPath} ${args.join(' ')}`);
 
       // Remove PORT from environment so code-server doesn't try to use it
       const env = { ...process.env };
       delete env.PORT;
       env.DISABLE_UPDATE_CHECK = 'true';
 
-      this.process = spawn(CODE_SERVER_PATH, args, {
+      this.process = spawn(this.codeServerPath, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: true,
         env,
@@ -205,7 +240,7 @@ class CodeServerService {
    * Check if code-server is installed
    */
   isInstalled(): boolean {
-    return existsSync(CODE_SERVER_PATH);
+    return findCodeServerPath() !== null;
   }
 
   /**

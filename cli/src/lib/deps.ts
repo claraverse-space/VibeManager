@@ -56,10 +56,12 @@ export function checkTmux(): DependencyCheck {
 export function checkCodeServer(): DependencyCheck {
   const paths = [
     join(homedir(), '.local', 'bin', 'code-server'),
-    '/usr/local/bin/code-server',
+    '/opt/homebrew/bin/code-server',  // macOS Homebrew (Apple Silicon)
+    '/usr/local/bin/code-server',      // macOS Homebrew (Intel) / Linux
     '/usr/bin/code-server',
   ];
 
+  // First check known paths
   for (const path of paths) {
     if (existsSync(path)) {
       try {
@@ -78,6 +80,34 @@ export function checkCodeServer(): DependencyCheck {
         return { name: 'code-server', installed: true, path };
       }
     }
+  }
+
+  // Fallback: try 'which' command to find it in PATH
+  try {
+    const whichPath = execFileSync('which', ['code-server'], {
+      encoding: 'utf-8',
+      timeout: 5000,
+    }).trim();
+
+    if (whichPath && existsSync(whichPath)) {
+      try {
+        const version = execFileSync(whichPath, ['--version'], {
+          encoding: 'utf-8',
+          timeout: 5000,
+        }).trim().split('\n')[0];
+
+        return {
+          name: 'code-server',
+          installed: true,
+          path: whichPath,
+          version,
+        };
+      } catch {
+        return { name: 'code-server', installed: true, path: whichPath };
+      }
+    }
+  } catch {
+    // which failed, code-server not in PATH
   }
 
   return { name: 'code-server', installed: false };

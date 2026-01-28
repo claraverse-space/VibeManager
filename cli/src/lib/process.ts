@@ -1,9 +1,11 @@
 import { execFileSync, spawn, type ChildProcess } from 'child_process';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, openSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 
-const PID_FILE = join(homedir(), '.local', 'share', 'vibemanager', 'vibemanager.pid');
+const DATA_DIR = join(homedir(), '.local', 'share', 'vibemanager');
+const PID_FILE = join(DATA_DIR, 'vibemanager.pid');
+const LOG_FILE = join(DATA_DIR, 'vibemanager.log');
 
 /**
  * Get the path to the server entry point
@@ -78,9 +80,11 @@ export function startServer(port: number = 3131): ChildProcess | null {
   }
 
   // Start the server as a detached process
+  // Redirect stdout/stderr to log file for debugging while allowing full detach
+  const logFd = openSync(LOG_FILE, 'a');
   const child = spawn('bun', ['run', serverPath], {
     detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', logFd, logFd],
     env: {
       ...process.env,
       PORT: String(port),
