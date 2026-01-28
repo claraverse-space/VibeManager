@@ -19,10 +19,10 @@ export function getWsUrl(): string {
 
 /**
  * Get preview URL for a given port
- * Uses the /preview proxy route for remote access
+ * Uses direct URL to the port on the same hostname
  */
 export function getPreviewUrl(port: number): string {
-  return `${getBaseUrl()}/preview/${port}`;
+  return `http://${window.location.hostname}:${port}`;
 }
 
 /**

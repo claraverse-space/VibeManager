@@ -27,6 +27,25 @@ code.get('/url', (c) => {
   return c.json({ success: true, data: { url } });
 });
 
+// Start code-server
+code.post('/start', async (c) => {
+  const status = codeServerService.getStatus();
+
+  if (!status.installed) {
+    return c.json({ success: false, error: 'code-server not installed' }, 404);
+  }
+
+  if (status.running) {
+    return c.json({ success: true, message: 'code-server already running' });
+  }
+
+  const started = await codeServerService.start();
+  if (started) {
+    return c.json({ success: true, message: 'code-server started' });
+  }
+  return c.json({ success: false, error: 'Failed to start code-server' }, 500);
+});
+
 // Restart code-server
 code.post('/restart', async (c) => {
   codeServerService.stop();
@@ -47,9 +66,8 @@ export const codeProxy = new Hono();
 // Proxy all requests to code-server
 codeProxy.all('/*', async (c) => {
   const port = codeServerService.getPort();
-  const status = codeServerService.getStatus();
 
-  if (!status.running) {
+  if (!port) {
     return c.json({ success: false, error: 'code-server not running' }, 503);
   }
 

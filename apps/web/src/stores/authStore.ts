@@ -42,6 +42,7 @@ export const useAuthStore = create<AuthState>()(
           token,
           isAuthenticated: true,
           isLoading: false,
+          setupRequired: false,
         }),
 
       logout: () =>

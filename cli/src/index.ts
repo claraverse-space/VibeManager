@@ -4,6 +4,7 @@ import { initCommand } from './commands/init';
 import { startCommand } from './commands/start';
 import { stopCommand } from './commands/stop';
 import { statusCommand } from './commands/status';
+import { updateCommand } from './commands/update';
 
 const program = new Command();
 
@@ -17,5 +18,6 @@ program.addCommand(initCommand);
 program.addCommand(startCommand);
 program.addCommand(stopCommand);
 program.addCommand(statusCommand);
+program.addCommand(updateCommand);
 
 program.parse();

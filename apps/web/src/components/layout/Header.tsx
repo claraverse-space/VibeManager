@@ -3,6 +3,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import SessionSwitcher from '../sessions/SessionSwitcher';
 import PortButtons from './PortButtons';
+import UpdateIndicator from './UpdateIndicator';
 import { useState } from 'react';
 import CreateSessionModal from '../sessions/CreateSessionModal';
 
@@ -49,6 +50,9 @@ export default function Header() {
 
         {/* Port buttons */}
         <PortButtons />
+
+        {/* Update indicator */}
+        <UpdateIndicator />
 
         {/* Theme toggle */}
         <button

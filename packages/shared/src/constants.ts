@@ -5,7 +5,7 @@ export const DEFAULT_ROWS = 30;
 
 // Server ports
 export const DEFAULT_PORT = 3131;
-export const DEFAULT_CODE_SERVER_PORT = 8083;
+export const DEFAULT_CODE_SERVER_PORT = 8443;
 
 // Tool search paths
 export const TOOL_SEARCH_PATHS = [

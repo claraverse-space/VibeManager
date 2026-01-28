@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 
 const preview = new Hono();
 
@@ -11,25 +12,22 @@ function isPortAllowed(port: number): boolean {
   return port >= MIN_PORT && port <= MAX_PORT && !BLOCKED_PORTS.includes(port);
 }
 
-// Proxy requests to preview ports
-// GET/POST/etc /preview/:port/* -> http://127.0.0.1:port/*
-preview.all('/:port{[0-9]+}/*', async (c) => {
-  const portStr = c.req.param('port');
-  const port = parseInt(portStr, 10);
+/**
+ * Get the target host from the request.
+ * Uses the Host header to proxy to the same IP that VibeManager is running on.
+ */
+function getTargetHost(c: Context): string {
+  const requestHost = c.req.header('host') || '127.0.0.1';
+  // Strip port if present (e.g., "192.168.1.10:3131" -> "192.168.1.10")
+  return requestHost.split(':')[0];
+}
 
-  if (!isPortAllowed(port)) {
-    return c.json({ success: false, error: 'Invalid port' }, 400);
-  }
-
-  // Get the path after /preview/:port
-  const originalPath = c.req.path;
-  const pathMatch = originalPath.match(/^\/preview\/\d+(.*)$/);
-  const path = pathMatch ? pathMatch[1] || '/' : '/';
-
-  // Build target URL
-  const targetUrl = `http://127.0.0.1:${port}${path}`;
-
-  // Get query string
+/**
+ * Proxy a request to the target port
+ */
+async function proxyRequest(c: Context, port: number, path: string): Promise<Response> {
+  const targetHost = getTargetHost(c);
+  const targetUrl = `http://${targetHost}:${port}${path}`;
   const queryString = new URL(c.req.url).search;
   const fullUrl = queryString ? `${targetUrl}${queryString}` : targetUrl;
 
@@ -65,15 +63,45 @@ preview.all('/:port{[0-9]+}/*', async (c) => {
       headers: responseHeaders,
     });
   } catch (error) {
-    console.error(`Preview proxy error for port ${port}:`, error);
+    console.error(`Preview proxy error for ${fullUrl}:`, error);
     return c.json({
       success: false,
       error: 'Preview unavailable - is the dev server running?'
     }, 502);
   }
+}
+
+// Proxy requests to preview ports
+// GET/POST/etc /preview/:port/* -> http://{host}:port/*
+preview.all('/:port{[0-9]+}/*', async (c) => {
+  const portStr = c.req.param('port');
+  const port = parseInt(portStr, 10);
+
+  if (!isPortAllowed(port)) {
+    return c.json({ success: false, error: 'Invalid port' }, 400);
+  }
+
+  // Get the path after /preview/:port
+  const originalPath = c.req.path;
+  const pathMatch = originalPath.match(/^\/preview\/\d+(.*)$/);
+  const path = pathMatch ? pathMatch[1] || '/' : '/';
+
+  return proxyRequest(c, port, path);
 });
 
-// Handle root path for a port
+// Handle root path for a port (with trailing slash)
+preview.all('/:port{[0-9]+}/', async (c) => {
+  const portStr = c.req.param('port');
+  const port = parseInt(portStr, 10);
+
+  if (!isPortAllowed(port)) {
+    return c.json({ success: false, error: 'Invalid port' }, 400);
+  }
+
+  return proxyRequest(c, port, '/');
+});
+
+// Handle root path for a port (without trailing slash) - redirect
 preview.all('/:port{[0-9]+}', async (c) => {
   const portStr = c.req.param('port');
   const port = parseInt(portStr, 10);
