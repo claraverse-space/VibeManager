@@ -102,8 +102,8 @@ codeProxy.all('/*', async (c) => {
     // Build response headers
     const responseHeaders = new Headers();
     response.headers.forEach((value, key) => {
-      // Skip hop-by-hop headers
-      if (!['transfer-encoding', 'connection', 'keep-alive'].includes(key.toLowerCase())) {
+      // Skip hop-by-hop headers and content-encoding (Bun auto-decompresses)
+      if (!['transfer-encoding', 'connection', 'keep-alive', 'content-encoding'].includes(key.toLowerCase())) {
         responseHeaders.set(key, value);
       }
     });
