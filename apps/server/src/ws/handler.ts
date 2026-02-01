@@ -8,11 +8,15 @@ import {
   handleStatusConnection,
   handleStatusClose,
 } from './status';
+import {
+  handleLogsWebSocket,
+  handleLogsClose,
+} from './logs';
 import { validateToken } from '../middleware/auth';
 import { authService } from '../services/AuthService';
 
 interface WebSocketData {
-  type: 'terminal' | 'status';
+  type: 'terminal' | 'status' | 'logs';
   sessionName?: string;
   cols?: number;
   rows?: number;
@@ -54,6 +58,11 @@ export async function handleUpgrade(req: Request): Promise<WebSocketData | null>
     return { type: 'status', authenticated, userId };
   }
 
+  // Logs WebSocket
+  if (pathname === '/logs') {
+    return { type: 'logs', authenticated, userId };
+  }
+
   // Terminal WebSocket - check for /ws path with session parameter
   if (pathname === '/ws' || pathname === '/') {
     const sessionName = url.searchParams.get('session');
@@ -75,6 +84,8 @@ export async function handleOpen(ws: ServerWebSocket<WebSocketData>): Promise<vo
 
   if (data.type === 'status') {
     handleStatusConnection(ws);
+  } else if (data.type === 'logs') {
+    handleLogsWebSocket(ws);
   } else if (data.type === 'terminal' && data.sessionName) {
     await handleTerminalConnection(ws, data.sessionName, data.cols, data.rows);
   }
@@ -101,6 +112,8 @@ export function handleClose(ws: ServerWebSocket<WebSocketData>): void {
 
   if (data.type === 'status') {
     handleStatusClose(ws);
+  } else if (data.type === 'logs') {
+    handleLogsClose(ws);
   } else if (data.type === 'terminal') {
     handleTerminalClose(ws);
   }

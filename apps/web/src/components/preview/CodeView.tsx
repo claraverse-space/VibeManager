@@ -120,9 +120,12 @@ export default function CodeView() {
   return (
     <div className="flex-1 flex flex-col bg-bg min-h-0 h-full">
       <iframe
+        key={codeServerUrl}
         src={codeServerUrl}
         className="w-full h-full border-none flex-1"
-        allow="clipboard-read; clipboard-write"
+        allow="clipboard-read; clipboard-write; cross-origin-isolated"
+        referrerPolicy="no-referrer"
+        loading="eager"
       />
     </div>
   );

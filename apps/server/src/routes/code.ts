@@ -102,11 +102,25 @@ codeProxy.all('/*', async (c) => {
     // Build response headers
     const responseHeaders = new Headers();
     response.headers.forEach((value, key) => {
-      // Skip hop-by-hop headers and content-encoding (Bun auto-decompresses)
-      if (!['transfer-encoding', 'connection', 'keep-alive', 'content-encoding'].includes(key.toLowerCase())) {
-        responseHeaders.set(key, value);
+      const lowerKey = key.toLowerCase();
+      // Skip hop-by-hop headers, content-encoding (Bun auto-decompresses),
+      // and headers that prevent iframe embedding
+      if ([
+        'transfer-encoding',
+        'connection',
+        'keep-alive',
+        'content-encoding',
+        'x-frame-options',           // Blocks iframe embedding
+        'content-security-policy',   // May block frame-ancestors
+        'x-content-type-options',    // Can cause issues
+      ].includes(lowerKey)) {
+        return;
       }
+      responseHeaders.set(key, value);
     });
+
+    // Explicitly allow iframe embedding
+    responseHeaders.set('X-Frame-Options', 'SAMEORIGIN');
 
     return new Response(response.body, {
       status: response.status,

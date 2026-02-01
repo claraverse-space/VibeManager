@@ -1,9 +1,10 @@
 import type { ServerWebSocket } from 'bun';
 import { sessionService } from '../services/SessionService';
+import { taskService } from '../services/TaskService';
 import { systemMonitor, getListeningPorts } from '../services/SystemMonitor';
 import { activityService } from '../services/ActivityService';
 import { STATUS_UPDATE_INTERVAL } from '@vibemanager/shared';
-import type { SessionActivity } from '@vibemanager/shared';
+import type { Session, SessionActivity } from '@vibemanager/shared';
 
 // Track status WebSocket connections
 const statusClients = new Set<ServerWebSocket<unknown>>();
@@ -58,12 +59,14 @@ function getIdleActivity(): SessionActivity {
   };
 }
 
+type SessionWithAlive = Session & { alive: boolean };
+
 /**
  * Enrich sessions with activity data
  */
 function enrichSessionsWithActivity(
-  sessions: Array<{ name: string; alive: boolean; [key: string]: unknown }>
-): Array<{ name: string; alive: boolean; activity: SessionActivity; [key: string]: unknown }> {
+  sessions: SessionWithAlive[]
+): Array<SessionWithAlive & { activity: SessionActivity }> {
   // Poll alive sessions for activity
   for (const session of sessions) {
     if (session.alive) {
@@ -87,10 +90,11 @@ async function broadcastStatus(): Promise<void> {
   if (statusClients.size === 0) return;
 
   try {
-    const [sessions, system, ports] = await Promise.all([
+    const [sessions, system, ports, tasks] = await Promise.all([
       sessionService.list(),
       Promise.resolve(systemMonitor.getStats()),
       Promise.resolve(getListeningPorts()),
+      taskService.list(),
     ]);
 
     const sessionsWithActivity = enrichSessionsWithActivity(sessions);
@@ -100,6 +104,7 @@ async function broadcastStatus(): Promise<void> {
       sessions: sessionsWithActivity,
       system,
       ports,
+      tasks,
     });
 
     for (const client of statusClients) {
@@ -119,10 +124,11 @@ async function broadcastStatus(): Promise<void> {
  */
 async function sendStatusUpdate(ws: ServerWebSocket<unknown>): Promise<void> {
   try {
-    const [sessions, system, ports] = await Promise.all([
+    const [sessions, system, ports, tasks] = await Promise.all([
       sessionService.list(),
       Promise.resolve(systemMonitor.getStats()),
       Promise.resolve(getListeningPorts()),
+      taskService.list(),
     ]);
 
     const sessionsWithActivity = enrichSessionsWithActivity(sessions);
@@ -133,6 +139,7 @@ async function sendStatusUpdate(ws: ServerWebSocket<unknown>): Promise<void> {
         sessions: sessionsWithActivity,
         system,
         ports,
+        tasks,
       })
     );
   } catch (error) {

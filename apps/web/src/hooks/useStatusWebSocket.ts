@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useSessionStore } from '../stores/sessionStore';
+import { useTaskStore } from '../stores/taskStore';
 import { useAuthStore } from '../stores/authStore';
 import type { StatusUpdate } from '@vibemanager/shared';
 
@@ -7,6 +8,7 @@ export function useStatusWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { setSessions, setSystemStats, setPorts, setIsLoading } = useSessionStore();
+  const { setTasks } = useTaskStore();
   const token = useAuthStore((state) => state.token);
 
   useEffect(() => {
@@ -28,6 +30,9 @@ export function useStatusWebSocket() {
             setSessions(data.sessions);
             setSystemStats(data.system);
             setPorts(data.ports);
+            if (data.tasks) {
+              setTasks(data.tasks);
+            }
           }
         } catch (error) {
           console.error('Error parsing status message:', error);
@@ -58,7 +63,7 @@ export function useStatusWebSocket() {
         wsRef.current.close();
       }
     };
-  }, [setSessions, setSystemStats, setPorts, setIsLoading]);
+  }, [setSessions, setSystemStats, setPorts, setIsLoading, setTasks]);
 
   return wsRef.current;
 }

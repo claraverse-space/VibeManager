@@ -5,7 +5,28 @@ import type {
   ListeningPort,
   DirectoryEntry,
   ApiResponse,
+  Task,
+  CreateTaskInput,
+  UpdateTaskInput,
+  VerifierConfig,
+  ShellType,
 } from '@vibemanager/shared';
+
+// Fresh session task creation input
+export interface CreateTaskWithFreshSessionInput {
+  task: {
+    name: string;
+    prompt: string;
+    runnerType?: 'ralph' | 'simple' | 'manual';
+    maxIterations?: number;
+    verificationPrompt?: string | null;
+  };
+  session: {
+    name: string;
+    projectPath: string;
+    shell: ShellType;
+  };
+}
 import { useAuthStore } from '../stores/authStore';
 
 type SessionWithAlive = Session & { alive: boolean };
@@ -139,6 +160,92 @@ interface LoginResponse {
 interface SetupStatusResponse {
   setupRequired: boolean;
 }
+
+// Settings API
+type VerifierConfigResponse = VerifierConfig & { hasApiKey: boolean };
+
+export const settingsApi = {
+  getVerifier: () => request<VerifierConfigResponse>('/settings/verifier'),
+
+  updateVerifier: (config: Partial<VerifierConfig>) =>
+    request<VerifierConfigResponse>('/settings/verifier', {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    }),
+
+  testVerifier: () =>
+    request<{ message: string }>('/settings/verifier/test', {
+      method: 'POST',
+    }),
+};
+
+// Tasks API
+export const tasksApi = {
+  list: (sessionId?: string) =>
+    request<Task[]>(`/tasks${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''}`),
+
+  get: (id: string) => request<Task>(`/tasks/${id}`),
+
+  create: (input: CreateTaskInput) =>
+    request<Task>('/tasks', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  update: (id: string, input: UpdateTaskInput) =>
+    request<Task>(`/tasks/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+
+  delete: (id: string) =>
+    request<void>(`/tasks/${id}`, {
+      method: 'DELETE',
+    }),
+
+  start: (id: string) =>
+    request<Task>(`/tasks/${id}/start`, {
+      method: 'POST',
+    }),
+
+  pause: (id: string) =>
+    request<Task>(`/tasks/${id}/pause`, {
+      method: 'POST',
+    }),
+
+  resume: (id: string) =>
+    request<Task>(`/tasks/${id}/resume`, {
+      method: 'POST',
+    }),
+
+  cancel: (id: string, force = false) =>
+    request<Task>(`/tasks/${id}/cancel${force ? '?force=true' : ''}`, {
+      method: 'POST',
+    }),
+
+  complete: (id: string, result?: string) =>
+    request<Task>(`/tasks/${id}/complete`, {
+      method: 'POST',
+      body: JSON.stringify({ result: result || '' }),
+    }),
+
+  queue: (id: string) =>
+    request<Task>(`/tasks/${id}/queue`, {
+      method: 'POST',
+    }),
+
+  unqueue: (id: string) =>
+    request<Task>(`/tasks/${id}/unqueue`, {
+      method: 'POST',
+    }),
+
+  // Create a task with a fresh session (creates session, waits for it to be ready, then starts task)
+  createWithFreshSession: (input: CreateTaskWithFreshSessionInput) =>
+    request<Task>('/tasks/fresh-session', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+};
 
 // Auth API
 export const authApi = {

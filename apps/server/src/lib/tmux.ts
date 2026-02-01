@@ -73,10 +73,51 @@ export function listTmuxSessions(): string[] {
 
 /**
  * Send keys to a tmux session
+ * Returns true if successful, false if session doesn't exist
  */
-export function sendKeys(name: string, keys: string): void {
+export function sendKeys(name: string, keys: string, pressEnter = true): boolean {
   const tmuxName = `${TMUX_PREFIX}${name}`;
-  execFileSync(TMUX, ['send-keys', '-t', tmuxName, keys, 'Enter'], { stdio: 'ignore' });
+  try {
+    // Use -l to send literal text (handles special characters properly)
+    execFileSync(TMUX, ['send-keys', '-t', tmuxName, '-l', keys], { stdio: 'ignore' });
+    if (pressEnter) {
+      // Send Enter key separately using C-m (Ctrl+M = Enter)
+      execFileSync(TMUX, ['send-keys', '-t', tmuxName, 'C-m'], { stdio: 'ignore' });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Send Escape key to a tmux session (for interrupting)
+ * Returns true if successful, false if session doesn't exist
+ */
+export function sendEscape(name: string, times = 1): boolean {
+  const tmuxName = `${TMUX_PREFIX}${name}`;
+  try {
+    for (let i = 0; i < times; i++) {
+      execFileSync(TMUX, ['send-keys', '-t', tmuxName, 'Escape'], { stdio: 'ignore' });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Send Ctrl+C to a tmux session (for cancelling)
+ * Returns true if successful, false if session doesn't exist
+ */
+export function sendCtrlC(name: string): boolean {
+  const tmuxName = `${TMUX_PREFIX}${name}`;
+  try {
+    execFileSync(TMUX, ['send-keys', '-t', tmuxName, 'C-c'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

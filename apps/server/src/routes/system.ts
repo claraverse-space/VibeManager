@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { systemMonitor, getListeningPorts } from '../services/SystemMonitor';
 import { networkService } from '../services/NetworkService';
 import { updateService } from '../services/UpdateService';
+import { taskWatchdog } from '../services/TaskWatchdog';
 import { DEFAULT_PORT } from '@vibemanager/shared';
 
 const system = new Hono();
@@ -58,6 +59,16 @@ system.post('/update', async (c) => {
     }
 
     return c.json({ success: result.success, data: result });
+  } catch (error) {
+    return c.json({ success: false, error: String(error) }, 500);
+  }
+});
+
+// Get task watchdog status (for monitoring task health system)
+system.get('/watchdog', (c) => {
+  try {
+    const status = taskWatchdog.getStatus();
+    return c.json({ success: true, data: status });
   } catch (error) {
     return c.json({ success: false, error: String(error) }, 500);
   }

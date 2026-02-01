@@ -50,6 +50,31 @@ export const authSessions = sqliteTable('auth_sessions', {
   expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
 });
 
+// Tasks table (for Ralph Loop and task automation)
+export const tasks = sqliteTable('tasks', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id')
+    .notNull()
+    .references(() => sessions.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  prompt: text('prompt').notNull(),
+  runnerType: text('runner_type', { enum: ['ralph', 'simple', 'manual'] }).notNull().default('ralph'),
+  status: text('status', { enum: ['pending', 'queued', 'running', 'paused', 'completed', 'failed', 'cancelled'] }).notNull().default('pending'),
+  currentIteration: integer('current_iteration').notNull().default(0),
+  maxIterations: integer('max_iterations').notNull().default(10),
+  verificationPrompt: text('verification_prompt'),
+  lastVerificationResult: text('last_verification_result'),
+  statusMessage: text('status_message'),
+  result: text('result'),
+  error: text('error'),
+  queuePosition: integer('queue_position'),  // Position in queue (null = not queued)
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  startedAt: integer('started_at', { mode: 'timestamp' }),
+  completedAt: integer('completed_at', { mode: 'timestamp' }),
+  lastProgressAt: integer('last_progress_at', { mode: 'timestamp' }),  // Watchdog: last activity timestamp
+  healthCheckFailures: integer('health_check_failures').notNull().default(0),  // Watchdog: consecutive failures
+});
+
 // Type exports
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
@@ -61,3 +86,5 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type AuthSession = typeof authSessions.$inferSelect;
 export type NewAuthSession = typeof authSessions.$inferInsert;
+export type TaskRecord = typeof tasks.$inferSelect;
+export type NewTaskRecord = typeof tasks.$inferInsert;

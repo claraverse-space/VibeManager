@@ -7,6 +7,7 @@ import Header from './components/layout/Header';
 import ViewTabs from './components/layout/ViewTabs';
 import MainContent from './components/layout/MainContent';
 import StatusBar from './components/layout/StatusBar';
+import ToastContainer from './components/ui/Toast';
 import Setup from './pages/Setup';
 import Login from './pages/Login';
 
@@ -28,6 +29,7 @@ function AuthenticatedApp() {
       <ViewTabs />
       <MainContent />
       <StatusBar />
+      <ToastContainer />
     </div>
   );
 }

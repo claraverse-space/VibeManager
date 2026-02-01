@@ -2,12 +2,19 @@ import { create } from 'zustand';
 import type { ViewMode } from '@vibemanager/shared';
 import { getPreviewUrl } from '../lib/baseUrl';
 
+export interface Toast {
+  id: string;
+  message: string;
+  type: 'info' | 'error' | 'success' | 'warning';
+}
+
 interface UIState {
   theme: 'dark' | 'light';
   viewMode: ViewMode;
   previewUrl: string;
   previewPort: number | null;
   isConnecting: boolean;
+  toasts: Toast[];
 
   // Actions
   setTheme: (theme: 'dark' | 'light') => void;
@@ -17,6 +24,8 @@ interface UIState {
   setPreviewPort: (port: number | null) => void;
   setIsConnecting: (connecting: boolean) => void;
   setPreviewFromPort: (port: number | null) => void;
+  showToast: (message: string, type?: Toast['type']) => void;
+  dismissToast: (id: string) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -25,6 +34,7 @@ export const useUIStore = create<UIState>((set) => ({
   previewUrl: '',
   previewPort: null,
   isConnecting: false,
+  toasts: [],
 
   setTheme: (theme) => set({ theme }),
   toggleTheme: () =>
@@ -41,5 +51,17 @@ export const useUIStore = create<UIState>((set) => ({
     } else {
       set({ previewUrl: '', previewPort: null });
     }
+  },
+
+  showToast: (message, type = 'info') => {
+    const id = Math.random().toString(36).slice(2);
+    set((state) => ({ toasts: [...state.toasts, { id, message, type }] }));
+    setTimeout(() => {
+      set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }));
+    }, 3000);
+  },
+
+  dismissToast: (id) => {
+    set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }));
   },
 }));

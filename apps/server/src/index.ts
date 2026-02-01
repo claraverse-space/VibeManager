@@ -3,6 +3,7 @@ import { handleUpgrade, handleOpen, handleMessage, handleClose, type WebSocketDa
 import { DEFAULT_PORT } from '@vibemanager/shared';
 import { codeServerService } from './services/CodeServerService';
 import { fixPtyPermissions } from './lib/fix-pty-permissions';
+import { taskWatchdog } from './services/TaskWatchdog';
 
 // Fix node-pty permissions on macOS (must run before any PTY operations)
 fixPtyPermissions();
@@ -75,6 +76,19 @@ const server = Bun.serve<ExtendedWebSocketData>({
           const targetWs = new WebSocket(targetUrl);
           (data as { targetWs: WebSocket | null }).targetWs = targetWs;
 
+          // Queue messages until target is open
+          let pendingMessages: (string | ArrayBuffer)[] = [];
+          let targetOpen = false;
+
+          targetWs.addEventListener('open', () => {
+            targetOpen = true;
+            // Send any queued messages
+            for (const msg of pendingMessages) {
+              targetWs.send(msg);
+            }
+            pendingMessages = [];
+          });
+
           targetWs.addEventListener('message', (event) => {
             try {
               if (event.data instanceof Blob) {
@@ -89,14 +103,24 @@ const server = Bun.serve<ExtendedWebSocketData>({
             }
           });
 
-          targetWs.addEventListener('close', () => {
-            ws.close();
+          targetWs.addEventListener('close', (event) => {
+            ws.close(event.code, event.reason);
           });
 
           targetWs.addEventListener('error', (e) => {
             console.error('Code-server WebSocket error:', e);
             ws.close(1011, 'code-server connection error');
           });
+
+          // Store targetOpen and pendingMessages for use in message handler
+          (data as any).targetOpen = () => targetOpen;
+          (data as any).queueMessage = (msg: string | ArrayBuffer) => {
+            if (targetOpen) {
+              targetWs.send(msg);
+            } else {
+              pendingMessages.push(msg);
+            }
+          };
         } catch (e) {
           console.error('Failed to connect to code-server WebSocket:', e);
           ws.close(1011, 'Failed to connect to code-server');
@@ -108,12 +132,12 @@ const server = Bun.serve<ExtendedWebSocketData>({
     message(ws, message) {
       const data = ws.data;
       if (data && 'type' in data && data.type === 'code-proxy') {
-        const targetWs = (data as { targetWs: WebSocket | null }).targetWs;
-        if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+        const queueMessage = (data as any).queueMessage;
+        if (queueMessage) {
           if (message instanceof Buffer || message instanceof Uint8Array) {
-            targetWs.send(message);
+            queueMessage(message);
           } else {
-            targetWs.send(String(message));
+            queueMessage(String(message));
           }
         }
         return;
@@ -136,9 +160,13 @@ const server = Bun.serve<ExtendedWebSocketData>({
 
 console.log(`VibeManager server running at http://localhost:${server.port}`);
 
+// Start the task watchdog for bulletproof task monitoring
+taskWatchdog.start();
+
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\nShutting down...');
+  taskWatchdog.stop();
   codeServerService.stop();
   server.stop();
   process.exit(0);
@@ -146,6 +174,7 @@ process.on('SIGINT', () => {
 
 process.on('SIGTERM', () => {
   console.log('\nShutting down...');
+  taskWatchdog.stop();
   codeServerService.stop();
   server.stop();
   process.exit(0);

@@ -113,6 +113,7 @@ export interface StatusUpdate {
   sessions: Array<Session & { alive: boolean; activity: SessionActivity }>;
   system: SystemStats;
   ports: ListeningPort[];
+  tasks: Task[];
 }
 
 // API Response types
@@ -127,4 +128,63 @@ export interface Settings {
   theme: 'dark' | 'light';
   codeServerPort: number;
   defaultShell: ShellType | 'auto';
+}
+
+// Task types
+export type TaskStatus = 'pending' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+export type RunnerType = 'ralph' | 'simple' | 'manual';
+
+export interface Task {
+  id: string;
+  sessionId: string;
+  name: string;
+  prompt: string;
+  runnerType: RunnerType;
+  status: TaskStatus;
+  currentIteration: number;
+  maxIterations: number;
+  verificationPrompt: string | null;
+  lastVerificationResult: string | null;
+  statusMessage: string | null;
+  result: string | null;
+  error: string | null;
+  createdAt: Date;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  queuePosition: number | null;  // Position in queue (null = not queued)
+  // Watchdog health tracking
+  lastProgressAt: Date | null;   // Last time task made progress
+  healthCheckFailures: number;   // Consecutive health check failures
+}
+
+export interface CreateTaskInput {
+  sessionId: string;
+  name: string;
+  prompt: string;
+  runnerType?: RunnerType;
+  maxIterations?: number;
+  verificationPrompt?: string | null;
+  autoStart?: boolean;
+}
+
+export interface UpdateTaskInput {
+  name?: string;
+  prompt?: string;
+  maxIterations?: number;
+  verificationPrompt?: string | null;
+}
+
+// Verifier config types
+export interface VerifierConfig {
+  enabled: boolean;
+  apiUrl: string;
+  apiKey: string;
+  model: string;
+  maxTokens: number;
+}
+
+export interface VerificationResult {
+  passed: boolean;
+  feedback: string;
+  confidence: number;
 }
