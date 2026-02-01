@@ -33,7 +33,6 @@ export default function Dashboard() {
     setShowCreateTaskModal(true);
   };
   const runningTasks = tasks.filter((t) => t.status === 'running' || t.status === 'paused');
-  const pendingTasks = tasks.filter((t) => t.status === 'pending');
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto p-4 gap-4 scrollbar-touch">
