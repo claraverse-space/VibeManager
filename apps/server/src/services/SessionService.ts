@@ -49,6 +49,9 @@ export class SessionService {
     if (resolved.shell === 'claude' && autonomous) {
       command = `${resolved.path} --dangerously-skip-permissions`;
     }
+    if (resolved.shell === 'kimi' && autonomous) {
+      command = `${resolved.path} -y`;
+    }
 
     // Create tmux session
     createTmuxSession(name, projectPath, command);
@@ -166,6 +169,9 @@ export class SessionService {
     let command = resolved.path;
     if (resolved.shell === 'claude' && session.autonomous) {
       command = `${resolved.path} --dangerously-skip-permissions`;
+    }
+    if (resolved.shell === 'kimi' && session.autonomous) {
+      command = `${resolved.path} -y`;
     }
 
     // Recreate tmux session

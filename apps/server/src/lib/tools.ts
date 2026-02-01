@@ -56,6 +56,12 @@ export function resolveShell(shell: ShellType | 'auto'): { shell: ShellType; pat
       return { shell: 'claude', path: claudePath };
     }
 
+    // Try kimi
+    const kimiPath = findTool('kimi-cli') || findTool('kimi');
+    if (kimiPath) {
+      return { shell: 'kimi', path: kimiPath };
+    }
+
     // Fall back to bash
     const bashPath = findTool('bash') || '/bin/bash';
     return { shell: 'bash', path: bashPath };
@@ -95,6 +101,7 @@ export function getAvailableShells(): ShellType[] {
   const shells: ShellType[] = [];
   if (isToolAvailable('opencode')) shells.push('opencode');
   if (isToolAvailable('claude')) shells.push('claude');
+  if (isToolAvailable('kimi-cli') || isToolAvailable('kimi')) shells.push('kimi');
   if (isToolAvailable('bash')) shells.push('bash');
   return shells;
 }

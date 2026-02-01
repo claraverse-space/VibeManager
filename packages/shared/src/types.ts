@@ -1,5 +1,5 @@
 // Session types
-export type ShellType = 'opencode' | 'claude' | 'bash';
+export type ShellType = 'opencode' | 'claude' | 'kimi' | 'bash';
 
 // Activity state types
 export type ActivityState = 'active' | 'idle' | 'waiting_for_input';

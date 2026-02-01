@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 // Session validation
-export const shellTypeSchema = z.enum(['opencode', 'claude', 'bash']);
-export const shellTypeWithAutoSchema = z.enum(['opencode', 'claude', 'bash', 'auto']);
+export const shellTypeSchema = z.enum(['opencode', 'claude', 'kimi', 'bash']);
+export const shellTypeWithAutoSchema = z.enum(['opencode', 'claude', 'kimi', 'bash', 'auto']);
 
 export const createSessionSchema = z.object({
   name: z

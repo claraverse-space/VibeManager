@@ -209,7 +209,7 @@ export default function CreateSessionModal({ open, onClose }: CreateSessionModal
                 Shell / Agent
               </label>
               <div className="flex gap-2">
-                {(['auto', 'opencode', 'claude', 'bash'] as const).map((s) => (
+                {(['auto', 'opencode', 'claude', 'kimi', 'bash'] as const).map((s) => (
                   <button
                     key={s}
                     type="button"
